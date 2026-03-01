@@ -3,6 +3,7 @@ package com.cosmolego527.create_pp.item.logistics.functions;
 import com.cosmolego527.create_pp.ModMenuTypes;
 import com.cosmolego527.create_pp.component.ModDataComponentTypes;
 import com.cosmolego527.create_pp.item.ModItems;
+import com.cosmolego527.create_pp.item.logistics.functions.program.TapeProgramMenu;
 import com.cosmolego527.create_pp.item.logistics.functions.voidfunc.VoidFunctionMenu;
 import com.simibubi.create.AllDataComponents;
 import com.simibubi.create.content.logistics.filter.*;
@@ -78,7 +79,9 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
         //    return PackageFilterMenu.create(id, inv, heldItem);
         //if (type == FunctionType.VOID)
         //    return new VoidFunctionMenu(ModMenuTypes.VOID_FUNCTION_MENU.get(), id, inv, heldItem);
-        return null;
+        ItemStack heldItem = player.getMainHandItem();
+        return new TapeProgramMenu(ModMenuTypes.TAPE_PROGRAM_MENU.get(), id, inv, heldItem);
+        //return null;
     }
 
     @Override
