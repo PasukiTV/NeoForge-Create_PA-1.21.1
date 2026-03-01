@@ -4,10 +4,9 @@ import com.cosmolego527.create_pp.ModMenuTypes;
 import com.cosmolego527.create_pp.component.ModDataComponentTypes;
 import com.cosmolego527.create_pp.item.ModItems;
 import com.cosmolego527.create_pp.item.logistics.functions.program.TapeProgramMenu;
-import com.cosmolego527.create_pp.item.logistics.functions.voidfunc.VoidFunctionMenu;
 import com.simibubi.create.AllDataComponents;
-import com.simibubi.create.content.logistics.filter.*;
 import com.simibubi.create.foundation.item.ItemHelper;
+import com.simibubi.create.foundation.recipe.ItemCopyingRecipe.SupportsItemCopying;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -18,7 +17,6 @@ import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import com.simibubi.create.foundation.recipe.ItemCopyingRecipe.SupportsItemCopying;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
@@ -57,6 +55,8 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
     @Override
     public InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
         ItemStack heldItem = player.getItemInHand(hand);
+        if (type != FunctionType.VOID)
+            return InteractionResultHolder.pass(heldItem);
 
         if (!player.isShiftKeyDown() && hand == InteractionHand.MAIN_HAND) {
             if (!world.isClientSide && player instanceof ServerPlayer)
@@ -79,9 +79,11 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
         //    return PackageFilterMenu.create(id, inv, heldItem);
         //if (type == FunctionType.VOID)
         //    return new VoidFunctionMenu(ModMenuTypes.VOID_FUNCTION_MENU.get(), id, inv, heldItem);
+        if (type != FunctionType.VOID)
+            return null;
         ItemStack heldItem = player.getMainHandItem();
         return new TapeProgramMenu(ModMenuTypes.TAPE_PROGRAM_MENU.get(), id, inv, heldItem);
-        //return null;
+       // return null;
     }
 
     @Override
