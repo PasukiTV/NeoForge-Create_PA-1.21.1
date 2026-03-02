@@ -1,21 +1,23 @@
 package com.cosmolego527.create_pp.item.logistics.functions.program;
 
+import com.cosmolego527.create_pp.component.ModDataComponentTypes;
+import com.cosmolego527.create_pp.network.SaveTapeProgramPacket;
 import com.google.common.collect.ImmutableList;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.simibubi.create.content.trains.schedule.IScheduleInput;
-import com.simibubi.create.content.trains.schedule.Schedule;
-import com.simibubi.create.content.trains.schedule.ScheduleEntry;
+import com.simibubi.create.content.trains.schedule.*;
 import com.simibubi.create.content.trains.schedule.condition.ScheduleWaitCondition;
 import com.simibubi.create.content.trains.schedule.destination.ScheduleInstruction;
-import com.simibubi.create.foundation.gui.AllGuiTextures;
-import com.simibubi.create.foundation.gui.AllIcons;
-import com.simibubi.create.foundation.gui.ModularGuiLine;
-import com.simibubi.create.foundation.gui.ScreenWithStencils;
+import com.simibubi.create.foundation.gui.*;
 import com.simibubi.create.foundation.gui.menu.AbstractSimiContainerScreen;
-import com.simibubi.create.foundation.gui.widget.*;
+import com.simibubi.create.foundation.gui.widget.IconButton;
+import com.simibubi.create.foundation.gui.widget.Indicator;
 import com.simibubi.create.foundation.gui.widget.Indicator.State;
+import com.simibubi.create.foundation.gui.widget.Label;
+import com.simibubi.create.foundation.gui.widget.SelectionScrollInput;
+import com.simibubi.create.foundation.gui.widget.TooltipArea;
 import com.simibubi.create.foundation.utility.CreateLang;
+
 import net.createmod.catnip.animation.LerpedFloat;
 import net.createmod.catnip.animation.LerpedFloat.Chaser;
 import net.createmod.catnip.data.Pair;
@@ -26,22 +28,22 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.renderer.Rect2i;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-
-
 
 public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMenu> implements ScreenWithStencils {
 
@@ -73,6 +75,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private final IdentityHashMap<ScheduleInstruction, Integer> checkBlockTargetSelection = new IdentityHashMap<>();
     private int editingActionIndex = 0;
     private int editingCheckBlockTargetIndex = 0;
+    private boolean scheduleSavedToServer = false;
+    private boolean closeAfterSave = false;
+    private int closeAfterSaveTicks = 0;
 
     private static final List<Component> PAL_ACTION_OPTIONS = List.of(
             Component.literal("Move"),
@@ -87,9 +92,15 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             Component.literal("Front")
     );
 
+    private static final String ACTION_INDEX_TAG = "PalActionIndex";
+    private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
+
     public TapeProgramScreen(TapeProgramMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
         schedule = new Schedule();
+        CompoundTag tag = menu.contentHolder.getOrDefault(ModDataComponentTypes.VOID_FUNCTION_DATA, new CompoundTag());
+        if (!tag.isEmpty())
+            schedule = Schedule.fromTag(menu.player.registryAccess(), tag);
         menu.slotsActive = false;
         editorSubWidgets = new ModularGuiLine();
     }
@@ -102,7 +113,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         clearWidgets();
 
         confirmButton = new IconButton(leftPos + bg.getWidth() - 42, topPos + bg.getHeight() - 30, AllIcons.I_CONFIRM);
-        confirmButton.withCallback(() -> minecraft.player.closeContainer());
+        confirmButton.withCallback(this::saveAndClose);
         addRenderableWidget(confirmButton);
 
         cyclicIndicator = new Indicator(leftPos + 21, topPos + 196, CommonComponents.EMPTY);
@@ -204,7 +215,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
 
     private int getCheckBlockTargetIndex(ScheduleInstruction instruction) {
-        return Mth.clamp(checkBlockTargetSelection.getOrDefault(instruction, 0), 0, CHECK_BLOCK_TARGET_OPTIONS.size() - 1);
+        CompoundTag data = instruction.getData();
+        int stored = data.contains(CHECK_BLOCK_TARGET_INDEX_TAG) ? data.getInt(CHECK_BLOCK_TARGET_INDEX_TAG)
+                : checkBlockTargetSelection.getOrDefault(instruction, 0);
+        return Mth.clamp(stored, 0, CHECK_BLOCK_TARGET_OPTIONS.size() - 1);
     }
 
     private void updateSecondarySelector() {
@@ -229,7 +243,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     }
 
     private int getActionIndex(ScheduleInstruction instruction) {
-        return Mth.clamp(actionSelection.getOrDefault(instruction, 0), 0, PAL_ACTION_OPTIONS.size() - 1);
+        CompoundTag data = instruction.getData();
+        int stored = data.contains(ACTION_INDEX_TAG) ? data.getInt(ACTION_INDEX_TAG)
+                : actionSelection.getOrDefault(instruction, 0);
+        return Mth.clamp(stored, 0, PAL_ACTION_OPTIONS.size() - 1);
     }
 
     private Component getActionLabel(ScheduleInstruction instruction) {
@@ -270,11 +287,16 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             editing.setItem(i, menu.ghostInventory.getStackInSlot(i));
 
         if (editingDestination != null) {
+            CompoundTag destinationData = editingDestination.getData();
+            destinationData.putInt(ACTION_INDEX_TAG, editingActionIndex);
             actionSelection.put(editingDestination, editingActionIndex);
-            if (editingActionIndex == 1)
+            if (editingActionIndex == 2) {
+                destinationData.putInt(CHECK_BLOCK_TARGET_INDEX_TAG, editingCheckBlockTargetIndex);
                 checkBlockTargetSelection.put(editingDestination, editingCheckBlockTargetIndex);
-            else
+            } else {
+                destinationData.remove(CHECK_BLOCK_TARGET_INDEX_TAG);
                 checkBlockTargetSelection.remove(editingDestination);
+            }
         }
 
         editorSubWidgets.saveValues(editing.getData());
@@ -302,6 +324,13 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     @Override
     protected void containerTick() {
         super.containerTick();
+
+        if (closeAfterSave && --closeAfterSaveTicks <= 0) {
+            closeAfterSave = false;
+            minecraft.player.closeContainer();
+            return;
+        }
+
         scroll.tickChaser();
         for (LerpedFloat lerpedFloat : horizontalScrolls)
             lerpedFloat.tickChaser();
@@ -589,12 +618,18 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 ScheduleEntry entry = new ScheduleEntry();
                 entry.instruction = editingDestination;
                 entry.conditions.clear();
+                entry.instruction.getData().putInt(ACTION_INDEX_TAG, editingActionIndex);
+                if (editingActionIndex == 1)
+                    entry.instruction.getData().putInt(CHECK_BLOCK_TARGET_INDEX_TAG, editingCheckBlockTargetIndex);
                 actionSelection.put(entry.instruction, editingActionIndex);
+                if (editingActionIndex == 1)
+                    checkBlockTargetSelection.put(entry.instruction, editingCheckBlockTargetIndex);
                 schedule.entries.add(entry);
             }, true);
         }
         return true;
     }
+
 
     private void renderActionTooltip(@Nullable GuiGraphics graphics, List<Component> tooltip, int mx, int my) {
         if (graphics != null)
@@ -664,12 +699,6 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     protected void renderForeground(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         PoseStack matrixStack = graphics.pose();
         super.renderForeground(graphics, mouseX, mouseY, partialTicks);
-
-//        GuiGameElement.of(menu.contentHolder).<GuiGameElement
-//                        .GuiRenderBuilder>at(leftPos + AllGuiTextures.SCHEDULE.getWidth(),
-//                        topPos + AllGuiTextures.SCHEDULE.getHeight() - 56, -200)
-//                .scale(3)
-//                .render(graphics);
         action(graphics, mouseX, mouseY, -1);
 
         if (editingCondition == null && editingDestination == null)
@@ -737,9 +766,24 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         editorSubWidgets.renderWidgetBG(getGuiLeft() + 77, graphics);
         pPoseStack.popPose();
     }
+    private void saveProgram() {
+        if (scheduleSavedToServer)
+            return;
+        scheduleSavedToServer = true;
+
+        CompoundTag scheduleTag = schedule.entries.isEmpty() ? new CompoundTag() : schedule.write(menu.player.registryAccess());
+        PacketDistributor.sendToServer(new SaveTapeProgramPacket(scheduleTag));
+    }
+
+    private void saveAndClose() {
+        saveProgram();
+        closeAfterSave = true;
+        closeAfterSaveTicks = 2;
+    }
 
     @Override
     public void removed() {
+        saveProgram();
         super.removed();
     }
 
