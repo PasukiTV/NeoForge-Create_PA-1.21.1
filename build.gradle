@@ -22,6 +22,11 @@ repositories {
     maven { url = "https://maven.createmod.net" } // Create, Ponder, Flywheel
     maven { url = "https://maven.ithundxr.dev/snapshots" } // Registrate
     maven { url = "https://maven.blamejared.com" } // JEI
+    maven {
+        // Added this just in case the other doesn't work, like it didn't for me ._. - Cosmo
+        name = "ModMaven"
+        url = "https://modmaven.dev"
+    }
 }
 
 base {
