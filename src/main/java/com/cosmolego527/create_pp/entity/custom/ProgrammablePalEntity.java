@@ -319,7 +319,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 //            }
 //        });
 //    }
-
+//
     @Override
     /**
      * Returns data needed by getPickedResult.
