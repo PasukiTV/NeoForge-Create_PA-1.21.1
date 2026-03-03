@@ -1,12 +1,13 @@
-// 1.21.1	2026-03-03T22:15:24.9015454	Registrate Provider for create_programmablepals [Registries, Data Maps, Recipes, Advancements, Loot Tables, Tags (enchantments), Tags (blocks), Tags (items), Tags (fluids), Tags (entity_types), generic_server_provider, Blockstates, Item models, Lang (en_us/en_ud), generic_client_provider]
+// 1.21.1	2026-03-03T22:57:52.7631186	Registrate Provider for create_programmablepals [Registries, Data Maps, Recipes, Advancements, Loot Tables, Tags (enchantments), Tags (blocks), Tags (items), Tags (fluids), Tags (entity_types), generic_server_provider, Blockstates, Item models, Lang (en_us/en_ud), generic_client_provider]
 2eb1df360cd47594b44e7a325ebdcfbd0c3760ee assets/create_programmablepals/blockstates/factory_floor.json
-a95e0bb04fd9ea03125d790a4844a98f6fbe87ef assets/create_programmablepals/lang/en_ud.json
-49a6f92924efbb403fa2181284004f095b75b765 assets/create_programmablepals/lang/en_us.json
+29ed04b418c74a2b5314d0b860fb72e7d5110445 assets/create_programmablepals/lang/en_ud.json
+d346a183d4eb03c85587591eb34bceb1b3254b5b assets/create_programmablepals/lang/en_us.json
 243f47172a4bc2450cf444019acd7852dcb55a25 assets/create_programmablepals/models/block/factory_floor.json
 aa5193ed340f5ade97a6d947c5eac55950051b07 assets/create_programmablepals/models/item/automaton_processor.json
 1f0f56158842c3f1d65e774f9197b11da7402929 assets/create_programmablepals/models/item/bool_function_tape.json
 93a3dd78179a37564a1c0f1d55b284cf024b4544 assets/create_programmablepals/models/item/concluses_music_disc.json
 a42c0868d1b356f206fb7f2cb0cb830173537b39 assets/create_programmablepals/models/item/factory_floor.json
+0050bd7db2534c3e66b77fd4106522f56c666e04 assets/create_programmablepals/models/item/fight_tape.json
 78f5213d5ec7466f2e5e9ee89d15811b52ca8a3f assets/create_programmablepals/models/item/float_function_tape.json
 f7de415fdb23ecc102455b6137281ce2d4d5566b assets/create_programmablepals/models/item/int_function_tape.json
 fb7accc84bad19b6d15f867b954a8e9a5abc884d assets/create_programmablepals/models/item/programmable_pal_box.json
@@ -34,6 +35,6 @@ a31361ab27b97fcdda9c009c1759367bfb51158b data/create/tags/block/wrench_pickup.js
 ea4f2ef9727e1fd029a1467a257043b8040e7819 data/create_programmablepals/advancement/recipes/building_blocks/factory_floor_from_ingots_iron_stonecutting.json
 cfca9e013927d5bbb42f92310a7c654012ee0d87 data/create_programmablepals/loot_table/blocks/factory_floor.json
 7021c440246daf2bf2a69a00eb9266bcebb90f64 data/create_programmablepals/recipe/factory_floor_from_ingots_iron_stonecutting.json
-8302788de334f1ed9fb0d158a8bbf4b170bdd375 data/create_programmablepals/tags/item/programmable_instruction_item.json
+39f87a3046757337502b277580812853b1fea0a1 data/create_programmablepals/tags/item/programmable_instruction_item.json
 bbe9ab02790c306dbadffc7850bf303c0b623a2b data/create_programmablepals/tags/item/programmable_pal_item.json
 a31361ab27b97fcdda9c009c1759367bfb51158b data/minecraft/tags/block/mineable/pickaxe.json

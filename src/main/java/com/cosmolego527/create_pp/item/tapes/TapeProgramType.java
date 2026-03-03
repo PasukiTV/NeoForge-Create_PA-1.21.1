@@ -25,24 +25,31 @@ import net.neoforged.neoforge.items.ItemStackHandler;
 
 import javax.annotation.Nonnull;
 
-public class FunctionTapeItem extends Item implements MenuProvider, SupportsItemCopying {
+public class TapeProgramType extends Item implements MenuProvider, SupportsItemCopying {
 
     public FunctionInstruction[] functionInstructions;
 
-    private FunctionType type;
+    private TapeType type;
 
-    public enum FunctionType {
-        TAPE, BOOL, INT, STRING, VOID, FLOAT;
+    public enum TapeType {
+        TAPE,
+        FIGHT;
+//        BOOL,
+//        INT,
+//        STRING,
+//        VOID,
+//        FLOAT;
     }
 
-    public static FunctionTapeItem programmableTapeItem(Properties properties) {return new FunctionTapeItem(FunctionType.TAPE, properties);}
-    public static FunctionTapeItem boolFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.BOOL, properties);}
-    public static FunctionTapeItem intFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.INT, properties);}
-    public static FunctionTapeItem stringFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.STRING, properties);}
-    public static FunctionTapeItem voidFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.VOID, properties);}
-    public static FunctionTapeItem floatFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.FLOAT, properties);}
+    public static TapeProgramType programmableTapeItem(Properties properties) {return new TapeProgramType(TapeType.TAPE, properties);}
+    public static TapeProgramType fightTapeItem(Properties properties) {return new TapeProgramType(TapeType.FIGHT, properties);}
+//    public static TapeProgramType boolFuncItem(Properties properties) {return new TapeProgramType(TapeType.BOOL, properties);}
+//    public static TapeProgramType intFuncItem(Properties properties) {return new TapeProgramType(TapeType.INT, properties);}
+//    public static TapeProgramType stringFuncItem(Properties properties) {return new TapeProgramType(TapeType.STRING, properties);}
+//    public static TapeProgramType voidFuncItem(Properties properties) {return new TapeProgramType(TapeType.VOID, properties);}
+//    public static TapeProgramType floatFuncItem(Properties properties) {return new TapeProgramType(TapeType.FLOAT, properties);}
 
-    public FunctionTapeItem(FunctionType type, Properties properties) {
+    public TapeProgramType(TapeType type, Properties properties) {
         super(properties);
         this.type = type;
     }
@@ -56,7 +63,7 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
     @Override
     public InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
         ItemStack heldItem = player.getItemInHand(hand);
-        if (type != FunctionType.TAPE)
+        if (type != TapeType.TAPE)
             return InteractionResultHolder.pass(heldItem);
 
         if (!player.isShiftKeyDown() && hand == InteractionHand.MAIN_HAND) {
@@ -72,15 +79,15 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
     @Override
     public AbstractContainerMenu createMenu(int id, Inventory inv, Player player) {
         //ItemStack heldItem = player.getMainHandItem();
-        //if (type == FunctionType.BOOL)
+        //if (type == TapeType.BOOL)
         //    return AttributeFilterMenu.create(id, inv, heldItem);
-        //if (type == FunctionType.INT)
+        //if (type == TapeType.INT)
         //    return AttributeFilterMenu.create(id, inv, heldItem);
-        //if (type == FunctionType.STRING)
+        //if (type == TapeType.STRING)
         //    return PackageFilterMenu.create(id, inv, heldItem);
-        //if (type == FunctionType.VOID)
+        //if (type == TapeType.VOID)
         //    return new VoidFunctionMenu(ModMenuTypes.VOID_FUNCTION_MENU.get(), id, inv, heldItem);
-        if (type != FunctionType.TAPE)
+        if (type != TapeType.TAPE)
             return null;
         ItemStack heldItem = player.getMainHandItem();
         return new TapeProgramMenu(ModMenuTypes.TAPE_PROGRAM_MENU.get(), id, inv, heldItem);
@@ -111,10 +118,12 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
     public DataComponentType<?> getComponentType() {
         return switch (type) {
             case TAPE -> null;
-            case BOOL -> AllDataComponents.FILTER_ITEMS;
-            case INT -> AllDataComponents.ATTRIBUTE_FILTER_MATCHED_ATTRIBUTES;
-            case STRING, FLOAT -> AllDataComponents.PACKAGE_ADDRESS;
-            case VOID -> ModDataComponentTypes.VOID_FUNCTION_DATA;
+            case FIGHT -> null;
+//            case BOOL -> AllDataComponents.FILTER_ITEMS;
+//            case INT -> AllDataComponents.ATTRIBUTE_FILTER_MATCHED_ATTRIBUTES;
+//            case STRING, FLOAT -> AllDataComponents.PACKAGE_ADDRESS;
+//            case VOID -> ModDataComponentTypes.VOID_FUNCTION_DATA;
+
 
         };
     }

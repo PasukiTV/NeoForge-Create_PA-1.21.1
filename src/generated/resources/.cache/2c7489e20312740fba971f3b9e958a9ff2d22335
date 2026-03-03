@@ -1,7 +1,8 @@
-// 1.21.1	2026-03-03T22:08:19.077223	Item Models: create_programmablepals
+// 1.21.1	2026-03-03T22:57:52.7656508	Item Models: create_programmablepals
 aa5193ed340f5ade97a6d947c5eac55950051b07 assets/create_programmablepals/models/item/automaton_processor.json
 1f0f56158842c3f1d65e774f9197b11da7402929 assets/create_programmablepals/models/item/bool_function_tape.json
 93a3dd78179a37564a1c0f1d55b284cf024b4544 assets/create_programmablepals/models/item/concluses_music_disc.json
+0050bd7db2534c3e66b77fd4106522f56c666e04 assets/create_programmablepals/models/item/fight_tape.json
 78f5213d5ec7466f2e5e9ee89d15811b52ca8a3f assets/create_programmablepals/models/item/float_function_tape.json
 f7de415fdb23ecc102455b6137281ce2d4d5566b assets/create_programmablepals/models/item/int_function_tape.json
 fb7accc84bad19b6d15f867b954a8e9a5abc884d assets/create_programmablepals/models/item/programmable_pal_box.json

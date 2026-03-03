@@ -2,7 +2,7 @@ package com.cosmolego527.create_pp.item;
 
 import com.cosmolego527.create_pp.CreatePP;
 import com.cosmolego527.create_pp.item.custom.ProgrammablePalKitItem;
-import com.cosmolego527.create_pp.item.tapes.FunctionTapeItem;
+import com.cosmolego527.create_pp.item.tapes.TapeProgramType;
 import com.cosmolego527.create_pp.sound.ModSounds;
 import com.simibubi.create.foundation.data.CreateRegistrate;
 import com.tterrag.registrate.util.entry.ItemEntry;
@@ -20,25 +20,31 @@ public class ModItems {
                     .register();
 
 
-    public static final ItemEntry<FunctionTapeItem>
+    public static final ItemEntry<TapeProgramType>
             PROGRAMMABLE_TAPE =
-            CreatePP.REGISTRATE.item("programmable_tape", FunctionTapeItem::programmableTapeItem)
+            CreatePP.REGISTRATE.item("programmable_tape", TapeProgramType::programmableTapeItem)
                     .register(),
+            FIGHT_TAPE =
+            CreatePP.REGISTRATE.item("fight_tape", TapeProgramType::fightTapeItem)
+                    .register();
+/*
             VOID_FUNCTION_TAPE =
-            CreatePP.REGISTRATE.item("void_function_tape", FunctionTapeItem::voidFuncItem)
+            CreatePP.REGISTRATE.item("void_function_tape", TapeProgramType::voidFuncItem)
                     .register(),
             BOOL_FUNCTION_TAPE =
-            CreatePP.REGISTRATE.item("bool_function_tape", FunctionTapeItem::boolFuncItem)
+            CreatePP.REGISTRATE.item("bool_function_tape", TapeProgramType::boolFuncItem)
                     .register(),
             STRING_FUNCTION_TAPE =
-            CreatePP.REGISTRATE.item("string_function_tape", FunctionTapeItem::stringFuncItem)
+            CreatePP.REGISTRATE.item("string_function_tape", TapeProgramType::stringFuncItem)
                     .register(),
             INT_FUNCTION_TAPE =
-            CreatePP.REGISTRATE.item("int_function_tape", FunctionTapeItem::intFuncItem)
+            CreatePP.REGISTRATE.item("int_function_tape", TapeProgramType::intFuncItem)
                     .register(),
             FLOAT_FUNCTION_TAPE =
-            CreatePP.REGISTRATE.item("float_function_tape", FunctionTapeItem::intFuncItem)
+            CreatePP.REGISTRATE.item("float_function_tape", TapeProgramType::intFuncItem)
                     .register();
+*/
+
 
 
     public static final ItemEntry<Item> CONCLUSES_MUSIC_DISC = CreatePP.REGISTRATE.item("concluses_music_disc", Item::new)
@@ -90,17 +96,17 @@ public class ModItems {
 //
 //
 //    public static final DeferredItem<Item> COLORED_TAPE_VOID = ITEMS.register("colored_tape_void",
-//            () -> new FunctionTapeItem(FunctionTapeItem.FunctionType.VOID, new Item.Properties()));
+//            () -> new TapeProgramType(TapeProgramType.TapeType.VOID, new Item.Properties()));
 //    public static final DeferredItem<Item> COLORED_TAPE_FLOAT = ITEMS.register("colored_tape_float",
 //            () -> new Item(new Item.Properties()));
 //    public static final DeferredItem<Item> COLORED_TAPE_BOOL = ITEMS.register("colored_tape_bool",
-//            () -> new FunctionTapeItem(FunctionTapeItem.FunctionType.BOOL, new Item.Properties()));
+//            () -> new TapeProgramType(TapeProgramType.TapeType.BOOL, new Item.Properties()));
 //    public static final DeferredItem<Item> COLORED_TAPE_INT = ITEMS.register("colored_tape_int",
-//            () -> new FunctionTapeItem(FunctionTapeItem.FunctionType.INT, new Item.Properties()));
+//            () -> new TapeProgramType(TapeProgramType.TapeType.INT, new Item.Properties()));
 //    public static final DeferredItem<Item> COLORED_TAPE_STRING = ITEMS.register("colored_tape_string",
-//            () -> new FunctionTapeItem(FunctionTapeItem.FunctionType.STRING, new Item.Properties()));
+//            () -> new TapeProgramType(TapeProgramType.TapeType.STRING, new Item.Properties()));
 //
-//    //public static final ItemEntry<FunctionTapeItem> COLORED_TAPE_VOID = REGISTRATE.item("colored_tape_void", FunctionTapeItem::voidFuncItem)
+//    //public static final ItemEntry<TapeProgramType> COLORED_TAPE_VOID = REGISTRATE.item("colored_tape_void", TapeProgramType::voidFuncItem)
 //    //        .lang("Void Function Tape")
 //    //        .register();
 //

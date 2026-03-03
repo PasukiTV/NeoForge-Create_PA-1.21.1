@@ -56,7 +56,8 @@ public class CreatePPRegistrateTags {
                                 ModItems.PROGRAMMABLE_PAL_KIT_DEFAULT.get()
                         );
         prov.tag(ModTags.AllItemTags.PROGRAMMABLE_INSTRUCTION_ITEM.tag)
-                .add(ModItems.PROGRAMMABLE_TAPE.get());
+                .add(ModItems.PROGRAMMABLE_TAPE.get())
+                .add(ModItems.FIGHT_TAPE.get());
 
         for (ModTags.AllItemTags tag : ModTags.AllItemTags.values()) {
             if (tag.alwaysDatagen) {

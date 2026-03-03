@@ -4,14 +4,13 @@ import com.cosmolego527.create_pp.entity.ModEntities;
 import com.cosmolego527.create_pp.entity.ProgrammablePalVariant;
 import com.cosmolego527.create_pp.component.ModDataComponentTypes;
 import com.cosmolego527.create_pp.entity.menu.ProgrammablePalMenu;
-import com.cosmolego527.create_pp.util.ModTags;
-import com.simibubi.create.AllItems;
 import com.simibubi.create.content.trains.schedule.Schedule;
 import com.simibubi.create.content.trains.schedule.ScheduleEntry;
 import com.simibubi.create.content.trains.schedule.destination.ScheduleInstruction;
 import net.createmod.ponder.api.level.PonderLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -31,6 +30,7 @@ import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.*;
+import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.AxeItem;
@@ -51,6 +51,7 @@ import java.util.ArrayDeque;
 import com.cosmolego527.create_pp.ModMenuTypes;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithComplexSpawn {
     public final AnimationState idleAnimationState = new AnimationState();
@@ -77,6 +78,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private int queuedMoveDirectionIndex = 0;
     private CompoundTag queuedStepCheckInstructionData = null;
     private boolean skipNextStandaloneCheckInstruction = false;
+    private ItemStack lastInstructionTapeSnapshot = ItemStack.EMPTY;
 
     private final ArrayDeque<BlockPos> pendingChopTargets = new ArrayDeque<>();
     private final Set<BlockPos> queuedChopTargets = new HashSet<>();
@@ -85,6 +87,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private float currentChopProgress = 0f;
     private int chopCooldown = 0;
 
+    private UUID commanderUUID = null;
+    private boolean followCommander = true;
 
     private static final EntityDataAccessor<Integer> DOME_COLOR =
             SynchedEntityData.defineId(ProgrammablePalEntity.class, EntityDataSerializers.INT);
@@ -104,6 +108,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private static final String MOVE_STEP_CHECK_LINK_TAG = "PalMoveStepCheckLink";
     private static final String CHECK_BLOCK_MATCH_ACTION_KEY_TAG = "PalCheckBlockMatchActionKey";
     private static final String CHECK_BLOCK_MATCH_ITEM_TAG = "PalCheckBlockMatchItem";
+    private static final String COMMANDER_UUID_TAG = "CommanderUUID";
+    private static final String FOLLOW_COMMANDER_TAG = "FollowCommander";
 
 
     /**
@@ -113,7 +119,6 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         super(entityTypeIn, level);
         insertionDelay = 30;
     }
-
     /**
      * Implements ProgrammablePalEntity behavior for the programmable pal feature.
      */
@@ -129,7 +134,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
      */
     protected void dropAllDeathLoot(ServerLevel p_level, DamageSource damageSource) {
         super.dropAllDeathLoot(p_level, damageSource);
-        ItemEntity entityIn = new ItemEntity(level(), getX(), getY(), getZ(), itemStack);
+        ItemEntity entityIn = new ItemEntity(level(),getX(),getY(),getZ(), itemStack);
         p_level.addFreshEntity(entityIn);
         for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
             ItemStack stack = inventory.getItem(slot);
@@ -141,16 +146,16 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Implements build behavior for the programmable pal feature.
      */
-    public static EntityType.Builder<?> build(EntityType.Builder<?> builder) {
+    public static EntityType.Builder<?> build(EntityType.Builder<?> builder){
         @SuppressWarnings("unchecked")
         EntityType.Builder<ProgrammablePalEntity> palBuilder = (EntityType.Builder<ProgrammablePalEntity>) builder;
-        return palBuilder.sized(1, 1);
+        return palBuilder.sized(1,1);
     }
 
     /**
      * Updates internal state through setItem.
      */
-    public void setItem(ItemStack item) {
+    public void setItem(ItemStack item){
         this.itemStack = item;
         refreshDimensions();
     }
@@ -158,22 +163,21 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Returns data needed by getItem.
      */
-    public ItemStack getItem() {
+    public ItemStack getItem(){
         return this.itemStack;
     }
 
     /**
      * Updates internal state through setItemStack.
      */
-    public void setItemStack(ItemStack itemStack) {
-        if (itemStack == null) return;
+    public void setItemStack(ItemStack itemStack){
+        if(itemStack == null) return;
         this.entityData.set(DATA_ITEM_STACK, itemStack);
     }
-
     /**
      * Returns data needed by getItemStack.
      */
-    public ItemStack getItemStack() {
+    public ItemStack getItemStack(){
         return this.entityData.get(DATA_ITEM_STACK);
     }
 
@@ -205,13 +209,27 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         return inventory.getItem(TAPE_SLOT);
     }
 
+    private ItemStack normalizeTapeSnapshot(ItemStack stack) {
+        if (stack.isEmpty())
+            return ItemStack.EMPTY;
+        return stack.copyWithCount(1);
+    }
+
+    private void resetProgramRuntimeState() {
+        instructionPointer = 0;
+        instructionCooldown = 0;
+        queuedMoveSteps = 0;
+        queuedStepCheckInstructionData = null;
+        skipNextStandaloneCheckInstruction = false;
+        clearChopTask();
+    }
+
     private void syncStateFromInventory() {
         ItemStack tape = getInstructionTape();
-        if (tape.isEmpty()) {
-            instructionPointer = 0;
-            instructionCooldown = 0;
-            queuedMoveSteps = 0;
-            clearChopTask();
+        ItemStack normalizedTape = normalizeTapeSnapshot(tape);
+        if (!ItemStack.isSameItemSameComponents(lastInstructionTapeSnapshot, normalizedTape)) {
+            resetProgramRuntimeState();
+            lastInstructionTapeSnapshot = normalizedTape;
         }
 
         ItemStack equippedTool = getHeldTool();
@@ -261,8 +279,29 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Implements registerGoals behavior for the programmable pal feature.
      */
-//    @Override
-//    protected void registerGoals() {
+
+
+
+    @Override
+    protected void registerGoals() {
+        this.goalSelector.addGoal(1, new MeleeAttackGoal(this, 1.2D, true) {
+            @Override
+            public boolean canUse() {
+                return isFightTapeActive() && getTarget() != null && super.canUse();
+            }
+
+            @Override
+            public boolean canContinueToUse() {
+                return isFightTapeActive() && super.canContinueToUse();
+            }
+        });
+
+        this.targetSelector.addGoal(1, new HurtByTargetGoal(this) {
+            @Override
+            public boolean canUse() {
+                return isFightTapeActive() && super.canUse();
+            }
+        });
 //        this.goalSelector.addGoal(0, new FloatGoal(this) {
 //            @Override
 //            public boolean canUse() {
@@ -318,8 +357,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 //                return !hasActiveInstructionTape() && super.canContinueToUse();
 //            }
 //        });
-//    }
-//
+    }
+
     @Override
     /**
      * Returns data needed by getPickedResult.
@@ -348,10 +387,11 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Implements createPalAttributes behavior for the programmable pal feature.
      */
-    public static AttributeSupplier.Builder createPalAttributes() {
+    public static AttributeSupplier.Builder createPalAttributes(){
         return PathfinderMob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 10.0D)
-                .add(Attributes.MOVEMENT_SPEED, 0.2D);
+                .add(Attributes.MOVEMENT_SPEED, 0.2D)
+                .add(Attributes.ATTACK_DAMAGE, 3.0D);
     }
 
 
@@ -359,13 +399,14 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
      * Updates internal state through setupAnimationStates.
      */
     private void setupAnimationStates() {
-        if (this.idleAnimationTimeout <= 0) {
+        if(this.idleAnimationTimeout <= 0) {
             this.idleAnimationTimeout = 100;
             this.idleAnimationState.start(this.tickCount);
         } else {
             --this.idleAnimationTimeout;
         }
     }
+
 
 
     @Override
@@ -442,7 +483,10 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         compound.putInt("InstructionCooldown", instructionCooldown);
         compound.putInt("QueuedMoveSteps", queuedMoveSteps);
         compound.putInt("QueuedMoveDirectionIndex", queuedMoveDirectionIndex);
+        if (commanderUUID != null)
+            compound.putUUID(COMMANDER_UUID_TAG, commanderUUID);
     }
+
 
 
     @Override
@@ -455,12 +499,15 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         itemStack = ItemStack.parseOptional(level().registryAccess(), compound.getCompound("item"));
         ContainerHelper.loadAllItems(compound, inventory.getItems(), level().registryAccess());
         setHeldTool(ItemStack.parseOptional(level().registryAccess(), compound.getCompound("HeldTool")));
+        lastInstructionTapeSnapshot = normalizeTapeSnapshot(getInstructionTape());
         syncStateFromInventory();
         instructionPointer = compound.getInt("InstructionPointer");
         instructionCooldown = compound.getInt("InstructionCooldown");
         queuedMoveSteps = compound.getInt("QueuedMoveSteps");
         queuedMoveDirectionIndex = compound.getInt("QueuedMoveDirectionIndex");
+        commanderUUID = compound.hasUUID(COMMANDER_UUID_TAG) ? compound.getUUID(COMMANDER_UUID_TAG) : null;
     }
+
 
 
     @Override
@@ -493,15 +540,60 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
      * Implements mobInteract behavior for the programmable pal feature.
      */
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
-        if (!level().isClientSide)
+        if (!level().isClientSide) {
+            if (player.isShiftKeyDown() && isFightTapeActive()) {
+                if (commanderUUID == null || commanderUUID.equals(player.getUUID())) {
+                    commanderUUID = player.getUUID();
+                    followCommander = !followCommander;
+                    player.displayClientMessage(Component.literal(followCommander
+                            ? "Pal now follows you."
+                            : "Pal no longer follows you."), true);
+                }
+                return InteractionResult.SUCCESS;
+            }
+
+            commanderUUID = player.getUUID();
             openPalMenu(player);
+        }
         return InteractionResult.sidedSuccess(level().isClientSide);
+    }
+
+    private boolean isFightTapeActive() {
+        ItemStack tape = getInstructionTape();
+        if (tape.isEmpty())
+            return false;
+        return "fight_tape".equals(BuiltInRegistries.ITEM.getKey(tape.getItem()).getPath());
+    }
+
+    private void runFightTapeBehavior() {
+        if (!(level() instanceof ServerLevel serverLevel))
+            return;
+
+        Player commander = commanderUUID == null ? null : serverLevel.getPlayerByUUID(commanderUUID);
+        if (commander == null)
+            return;
+
+        LivingEntity target = commander.getLastHurtMob();
+        if (target == null || !target.isAlive() || target.distanceToSqr(this) > 256.0D)
+            target = commander.getLastHurtByMob();
+
+        if (target != null && target.isAlive() && target != this) {
+            setTarget(target);
+        } else if (followCommander) {
+            double distSq = distanceToSqr(commander);
+            if (distSq > 9.0D)
+                getNavigation().moveTo(commander, 1.1D);
+            else if (distSq < 4.0D)
+                getNavigation().stop();
+        }
     }
 
     /**
      * Checks the state used by hasActiveInstructionTape.
      */
     private boolean hasActiveInstructionTape() {
+        if (isFightTapeActive())
+            return false;
         ItemStack instructions = getInstructionTape();
         if (instructions.isEmpty())
             return false;
@@ -513,6 +605,15 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
      * Executes runtime logic for runProgramTick.
      */
     private void runProgramTick() {
+        if (isFightTapeActive()) {
+            queuedMoveSteps = 0;
+            queuedStepCheckInstructionData = null;
+            skipNextStandaloneCheckInstruction = false;
+            clearChopTask();
+            runFightTapeBehavior();
+            return;
+        }
+
         if (!hasActiveInstructionTape()) {
             queuedMoveSteps = 0;
             queuedStepCheckInstructionData = null;
