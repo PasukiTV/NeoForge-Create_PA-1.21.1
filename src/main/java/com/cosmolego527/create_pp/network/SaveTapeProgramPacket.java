@@ -2,7 +2,7 @@ package com.cosmolego527.create_pp.network;
 
 import com.cosmolego527.create_pp.CreatePP;
 import com.cosmolego527.create_pp.component.ModDataComponentTypes;
-import com.cosmolego527.create_pp.item.logistics.functions.program.TapeProgramMenu;
+import com.cosmolego527.create_pp.item.tapes.TapeProgramMenu;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;

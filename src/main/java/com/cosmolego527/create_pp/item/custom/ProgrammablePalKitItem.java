@@ -55,12 +55,10 @@ public class ProgrammablePalKitItem extends Item {
         return "item." + CreatePP.MOD_ID + ".programmable_pal_kit_" + Variant.name().toLowerCase();
     }
 
-
     @Override
     public boolean hasCustomEntity(ItemStack stack) {
         return true;
     }
-
 
     @Override
     public InteractionResult useOn(UseOnContext context) {
@@ -79,7 +77,6 @@ public class ProgrammablePalKitItem extends Item {
             return super.useOn(context);
         }
 
-
         ProgrammablePalEntity entity = new ProgrammablePalEntity(level, pos);
         ItemStack itemInHand = context.getItemInHand();
         var item = itemInHand.copy();
@@ -90,7 +87,6 @@ public class ProgrammablePalKitItem extends Item {
         itemInHand.shrink(1);
         return InteractionResult.SUCCESS;
     }
-
 
     public static boolean isPal(ItemStack stack) {
         return stack.getItem() instanceof ProgrammablePalKitItem;

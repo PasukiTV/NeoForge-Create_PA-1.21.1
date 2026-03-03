@@ -2,8 +2,8 @@ package com.cosmolego527.create_pp;
 
 import com.cosmolego527.create_pp.entity.client.ProgrammablePalScreen;
 import com.cosmolego527.create_pp.entity.menu.ProgrammablePalMenu;
-import com.cosmolego527.create_pp.item.logistics.functions.program.TapeProgramMenu;
-import com.cosmolego527.create_pp.item.logistics.functions.program.TapeProgramScreen;
+import com.cosmolego527.create_pp.item.tapes.TapeProgramMenu;
+import com.cosmolego527.create_pp.item.tapes.TapeProgramScreen;
 import com.tterrag.registrate.builders.MenuBuilder;
 import com.tterrag.registrate.util.entry.MenuEntry;
 import com.tterrag.registrate.util.nullness.NonNullSupplier;

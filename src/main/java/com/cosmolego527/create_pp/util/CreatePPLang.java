@@ -27,8 +27,6 @@ public class CreatePPLang extends Lang {
 		return result;
 	}
 
-	//
-
 	public static LangBuilder builder() {
 		return new LangBuilder(CreatePP.MOD_ID);
 	}

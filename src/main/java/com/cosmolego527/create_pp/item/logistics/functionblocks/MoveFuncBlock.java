@@ -1,3 +1,4 @@
+/*
 package com.cosmolego527.create_pp.item.logistics.functionblocks;
 
 import com.cosmolego527.create_pp.entity.custom.ProgrammablePalEntity;
@@ -15,3 +16,4 @@ public class MoveFuncBlock extends FuncBlock {
         pPal.getNavigation().moveTo(destination.x,destination.y,destination.z, pPal.getSpeed());
     }
 }
+*/

@@ -1,9 +1,9 @@
-package com.cosmolego527.create_pp.item.logistics.functions;
+package com.cosmolego527.create_pp.item.tapes;
 
 import com.cosmolego527.create_pp.ModMenuTypes;
 import com.cosmolego527.create_pp.component.ModDataComponentTypes;
 import com.cosmolego527.create_pp.item.ModItems;
-import com.cosmolego527.create_pp.item.logistics.functions.program.TapeProgramMenu;
+import com.cosmolego527.create_pp.item.logistics.functions.FunctionInstruction;
 import com.simibubi.create.AllDataComponents;
 import com.simibubi.create.foundation.item.ItemHelper;
 import com.simibubi.create.foundation.recipe.ItemCopyingRecipe.SupportsItemCopying;

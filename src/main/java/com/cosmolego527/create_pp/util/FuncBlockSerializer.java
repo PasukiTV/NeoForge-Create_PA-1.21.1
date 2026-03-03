@@ -1,4 +1,4 @@
-package com.cosmolego527.create_pp.util;
+/*package com.cosmolego527.create_pp.util;
 
 import com.cosmolego527.create_pp.item.logistics.functionblocks.BoolFuncBlock;
 import com.cosmolego527.create_pp.item.logistics.functionblocks.IfElseBlock;
@@ -68,4 +68,4 @@ public class FuncBlockSerializer {
             blocks.add(deserialize((CompoundTag) tag));
         return blocks;
     }
-}
+}*/

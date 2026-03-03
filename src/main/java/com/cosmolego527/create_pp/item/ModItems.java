@@ -2,7 +2,7 @@ package com.cosmolego527.create_pp.item;
 
 import com.cosmolego527.create_pp.CreatePP;
 import com.cosmolego527.create_pp.item.custom.ProgrammablePalKitItem;
-import com.cosmolego527.create_pp.item.logistics.functions.FunctionTapeItem;
+import com.cosmolego527.create_pp.item.tapes.FunctionTapeItem;
 import com.cosmolego527.create_pp.sound.ModSounds;
 import com.simibubi.create.foundation.data.CreateRegistrate;
 import com.tterrag.registrate.util.entry.ItemEntry;

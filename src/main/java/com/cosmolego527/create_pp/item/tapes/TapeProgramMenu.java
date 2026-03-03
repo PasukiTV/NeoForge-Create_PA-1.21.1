@@ -1,4 +1,4 @@
-package com.cosmolego527.create_pp.item.logistics.functions.program;
+package com.cosmolego527.create_pp.item.tapes;
 
 import com.simibubi.create.foundation.gui.menu.GhostItemMenu;
 import net.minecraft.network.RegistryFriendlyByteBuf;

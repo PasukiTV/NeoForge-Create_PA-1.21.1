@@ -2,28 +2,13 @@ package com.cosmolego527.create_pp.util;
 
 import com.cosmolego527.create_pp.CreatePP;
 import com.cosmolego527.create_pp.item.ModItems;
-import com.simibubi.create.AllItems;
-import com.simibubi.create.AllTags;
-import com.simibubi.create.Create;
 import com.simibubi.create.foundation.data.CreateRegistrate;
 import com.simibubi.create.foundation.data.TagGen;
-import com.simibubi.create.foundation.data.recipe.Mods;
-import com.simibubi.create.infrastructure.data.CreateRegistrateTags;
 import com.tterrag.registrate.providers.ProviderType;
 import com.tterrag.registrate.providers.RegistrateTagsProvider;
-import net.minecraft.tags.BlockTags;
-import net.minecraft.tags.ItemTags;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.material.Fluid;
-import net.minecraft.world.level.material.Fluids;
-import net.neoforged.neoforge.common.Tags;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class CreatePPRegistrateTags {
     private static final CreateRegistrate REGISTRATE = CreatePP.registrate();
@@ -79,7 +64,6 @@ public class CreatePPRegistrateTags {
             }
         }
     }
-
 
 /*    private static void genFluidTags(RegistrateTagsProvider<Fluid> provIn) {
         TagGen.CreateTagsProvider<Fluid> prov = new TagGen.CreateTagsProvider<>(provIn, Fluid::builtInRegistryHolder);

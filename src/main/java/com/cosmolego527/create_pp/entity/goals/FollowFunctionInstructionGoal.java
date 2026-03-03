@@ -1,4 +1,4 @@
-package com.cosmolego527.create_pp.entity.goals;
+/*package com.cosmolego527.create_pp.entity.goals;
 
 import com.cosmolego527.create_pp.entity.custom.ProgrammablePalEntity;
 import com.cosmolego527.create_pp.item.logistics.functions.FunctionInstruction;
@@ -17,4 +17,4 @@ public class FollowFunctionInstructionGoal extends Goal {
     public boolean canUse() {
         return false;
     }
-}
+}*/

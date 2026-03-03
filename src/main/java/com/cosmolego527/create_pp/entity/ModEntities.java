@@ -3,10 +3,6 @@ package com.cosmolego527.create_pp.entity;
 import com.cosmolego527.create_pp.CreatePP;
 import com.cosmolego527.create_pp.entity.client.ProgrammablePalRenderer;
 import com.cosmolego527.create_pp.entity.custom.ProgrammablePalEntity;
-import com.simibubi.create.Create;
-import com.simibubi.create.content.logistics.box.PackageEntity;
-import com.simibubi.create.content.logistics.box.PackageRenderer;
-import com.simibubi.create.content.logistics.box.PackageVisual;
 import com.simibubi.create.foundation.data.CreateEntityBuilder;
 import com.tterrag.registrate.util.entry.EntityEntry;
 import com.tterrag.registrate.util.nullness.NonNullConsumer;
@@ -15,14 +11,9 @@ import com.tterrag.registrate.util.nullness.NonNullSupplier;
 import net.createmod.catnip.lang.Lang;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.registries.DeferredRegister;
-
-import java.util.function.Supplier;
 
 public class ModEntities {
 
