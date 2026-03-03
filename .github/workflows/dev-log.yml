@@ -2,7 +2,7 @@ name: Discord Dev Log
 
 on:
   push:
-    branches: [ dev ]
+    branches: [ main, dev ]
 
 jobs:
   notify:
