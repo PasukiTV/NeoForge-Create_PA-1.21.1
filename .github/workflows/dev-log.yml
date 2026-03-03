@@ -1,0 +1,57 @@
+name: Discord Dev Log
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send embed to Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          COMMIT_URL: ${{ github.event.head_commit.url }}
+          COMMIT_ID: ${{ github.sha }}
+          COMPARE_URL: ${{ github.event.compare }}
+        run: |
+          set -e
+
+          SHORT_SHA="${COMMIT_ID:0:7}"
+
+          # Repo Name extrahieren (nur letzter Teil nach /)
+          REPO_NAME=$(echo "$REPO" | cut -d'/' -f2)
+
+          # Formatieren: underscores -> spaces, erste Buchstaben groß
+          FORMATTED_NAME=$(echo "$REPO_NAME" | sed 's/_/ /g' | sed 's/\b\(.\)/\u\1/g')
+
+          SAFE_MSG=$(printf "%s" "$COMMIT_MSG" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read())[1:-1])')
+          TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+          payload=$(cat <<EOF
+          {
+            "username": "Pasuki Dev Log",
+            "avatar_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+            "embeds": [
+              {
+                "title": "⚙ ${FORMATTED_NAME} updated",
+                "url": "${COMPARE_URL}",
+                "description": "📝 ${SAFE_MSG}",
+                "fields": [
+                  { "name": "Author", "value": "${ACTOR}", "inline": true },
+                  { "name": "Commit", "value": "[${SHORT_SHA}](${COMMIT_URL})", "inline": true }
+                ],
+                "footer": { "text": "Pasuki Mods • ${BRANCH}" },
+                "timestamp": "${TIMESTAMP}",
+                "color": 5814783
+              }
+            ]
+          }
+          EOF
+          )
+          
+          curl -sS -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK"
