@@ -75,6 +75,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private int instructionCooldown = 0;
     private int queuedMoveSteps = 0;
     private int queuedMoveDirectionIndex = 0;
+    private CompoundTag queuedStepCheckInstructionData = null;
+    private boolean skipNextStandaloneCheckInstruction = false;
 
     private final ArrayDeque<BlockPos> pendingChopTargets = new ArrayDeque<>();
     private final Set<BlockPos> queuedChopTargets = new HashSet<>();
@@ -82,6 +84,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private BlockPos currentChopTarget = null;
     private float currentChopProgress = 0f;
     private int chopCooldown = 0;
+
 
     private static final EntityDataAccessor<Integer> DOME_COLOR =
             SynchedEntityData.defineId(ProgrammablePalEntity.class, EntityDataSerializers.INT);
@@ -98,6 +101,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
     private static final String MOVE_DIRECTION_INDEX_TAG = "PalMoveDirectionIndex";
     private static final String MOVE_DISTANCE_INDEX_TAG = "PalMoveDistanceIndex";
+    private static final String MOVE_STEP_CHECK_LINK_TAG = "PalMoveStepCheckLink";
     private static final String CHECK_BLOCK_MATCH_ACTION_KEY_TAG = "PalCheckBlockMatchActionKey";
     private static final String CHECK_BLOCK_MATCH_ITEM_TAG = "PalCheckBlockMatchItem";
 
@@ -109,6 +113,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         super(entityTypeIn, level);
         insertionDelay = 30;
     }
+
     /**
      * Implements ProgrammablePalEntity behavior for the programmable pal feature.
      */
@@ -124,7 +129,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
      */
     protected void dropAllDeathLoot(ServerLevel p_level, DamageSource damageSource) {
         super.dropAllDeathLoot(p_level, damageSource);
-        ItemEntity entityIn = new ItemEntity(level(),getX(),getY(),getZ(), itemStack);
+        ItemEntity entityIn = new ItemEntity(level(), getX(), getY(), getZ(), itemStack);
         p_level.addFreshEntity(entityIn);
         for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
             ItemStack stack = inventory.getItem(slot);
@@ -136,16 +141,16 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Implements build behavior for the programmable pal feature.
      */
-    public static EntityType.Builder<?> build(EntityType.Builder<?> builder){
+    public static EntityType.Builder<?> build(EntityType.Builder<?> builder) {
         @SuppressWarnings("unchecked")
         EntityType.Builder<ProgrammablePalEntity> palBuilder = (EntityType.Builder<ProgrammablePalEntity>) builder;
-        return palBuilder.sized(1,1);
+        return palBuilder.sized(1, 1);
     }
 
     /**
      * Updates internal state through setItem.
      */
-    public void setItem(ItemStack item){
+    public void setItem(ItemStack item) {
         this.itemStack = item;
         refreshDimensions();
     }
@@ -153,21 +158,22 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Returns data needed by getItem.
      */
-    public ItemStack getItem(){
+    public ItemStack getItem() {
         return this.itemStack;
     }
 
     /**
      * Updates internal state through setItemStack.
      */
-    public void setItemStack(ItemStack itemStack){
-        if(itemStack == null) return;
+    public void setItemStack(ItemStack itemStack) {
+        if (itemStack == null) return;
         this.entityData.set(DATA_ITEM_STACK, itemStack);
     }
+
     /**
      * Returns data needed by getItemStack.
      */
-    public ItemStack getItemStack(){
+    public ItemStack getItemStack() {
         return this.entityData.get(DATA_ITEM_STACK);
     }
 
@@ -255,64 +261,64 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Implements registerGoals behavior for the programmable pal feature.
      */
-    @Override
-    protected void registerGoals() {
-        this.goalSelector.addGoal(0, new FloatGoal(this){
-            @Override
-            public boolean canUse() {
-                return !hasActiveInstructionTape() && super.canUse();
-            }
-
-            @Override
-            public boolean canContinueToUse() {
-                return !hasActiveInstructionTape() && super.canContinueToUse();
-            }
-        });
-        this.goalSelector.addGoal(1, new TemptGoal(this,1.0, stack -> stack.is(AllItems.ANDESITE_ALLOY), false){
-            @Override
-            public boolean canUse() {
-                return !hasActiveInstructionTape() && super.canUse();
-            }
-
-            @Override
-            public boolean canContinueToUse() {
-                return !hasActiveInstructionTape() && super.canContinueToUse();
-            }
-        });
-        this.goalSelector.addGoal(2, new WaterAvoidingRandomStrollGoal(this, 1.0){
-            @Override
-            public boolean canUse() {
-                return !hasActiveInstructionTape() && super.canUse();
-            }
-
-            @Override
-            public boolean canContinueToUse() {
-                return !hasActiveInstructionTape() && super.canContinueToUse();
-            }
-        });
-        this.goalSelector.addGoal(3, new LookAtPlayerGoal(this, Player.class, 10f){
-            @Override
-            public boolean canUse() {
-                return !hasActiveInstructionTape() && super.canUse();
-            }
-
-            @Override
-            public boolean canContinueToUse() {
-                return !hasActiveInstructionTape() && super.canContinueToUse();
-            }
-        });
-        this.goalSelector.addGoal(4, new RandomLookAroundGoal(this){
-            @Override
-            public boolean canUse() {
-                return !hasActiveInstructionTape() && super.canUse();
-            }
-
-            @Override
-            public boolean canContinueToUse() {
-                return !hasActiveInstructionTape() && super.canContinueToUse();
-            }
-        });
-    }
+//    @Override
+//    protected void registerGoals() {
+//        this.goalSelector.addGoal(0, new FloatGoal(this) {
+//            @Override
+//            public boolean canUse() {
+//                return !hasActiveInstructionTape() && super.canUse();
+//            }
+//
+//            @Override
+//            public boolean canContinueToUse() {
+//                return !hasActiveInstructionTape() && super.canContinueToUse();
+//            }
+//        });
+//        this.goalSelector.addGoal(1, new TemptGoal(this, 1.0, stack -> stack.is(AllItems.ANDESITE_ALLOY), false) {
+//            @Override
+//            public boolean canUse() {
+//                return !hasActiveInstructionTape() && super.canUse();
+//            }
+//
+//            @Override
+//            public boolean canContinueToUse() {
+//                return !hasActiveInstructionTape() && super.canContinueToUse();
+//            }
+//        });
+//        this.goalSelector.addGoal(2, new WaterAvoidingRandomStrollGoal(this, 1.0) {
+//            @Override
+//            public boolean canUse() {
+//                return !hasActiveInstructionTape() && super.canUse();
+//            }
+//
+//            @Override
+//            public boolean canContinueToUse() {
+//                return !hasActiveInstructionTape() && super.canContinueToUse();
+//            }
+//        });
+//        this.goalSelector.addGoal(3, new LookAtPlayerGoal(this, Player.class, 10f) {
+//            @Override
+//            public boolean canUse() {
+//                return !hasActiveInstructionTape() && super.canUse();
+//            }
+//
+//            @Override
+//            public boolean canContinueToUse() {
+//                return !hasActiveInstructionTape() && super.canContinueToUse();
+//            }
+//        });
+//        this.goalSelector.addGoal(4, new RandomLookAroundGoal(this) {
+//            @Override
+//            public boolean canUse() {
+//                return !hasActiveInstructionTape() && super.canUse();
+//            }
+//
+//            @Override
+//            public boolean canContinueToUse() {
+//                return !hasActiveInstructionTape() && super.canContinueToUse();
+//            }
+//        });
+//    }
 
     @Override
     /**
@@ -342,7 +348,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Implements createPalAttributes behavior for the programmable pal feature.
      */
-    public static AttributeSupplier.Builder createPalAttributes(){
+    public static AttributeSupplier.Builder createPalAttributes() {
         return PathfinderMob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 10.0D)
                 .add(Attributes.MOVEMENT_SPEED, 0.2D);
@@ -353,14 +359,13 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
      * Updates internal state through setupAnimationStates.
      */
     private void setupAnimationStates() {
-        if(this.idleAnimationTimeout <= 0) {
+        if (this.idleAnimationTimeout <= 0) {
             this.idleAnimationTimeout = 100;
             this.idleAnimationState.start(this.tickCount);
         } else {
             --this.idleAnimationTimeout;
         }
     }
-
 
 
     @Override
@@ -440,7 +445,6 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     }
 
 
-
     @Override
     /**
      * Implements readAdditionalSaveData behavior for the programmable pal feature.
@@ -457,7 +461,6 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         queuedMoveSteps = compound.getInt("QueuedMoveSteps");
         queuedMoveDirectionIndex = compound.getInt("QueuedMoveDirectionIndex");
     }
-
 
 
     @Override
@@ -512,6 +515,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private void runProgramTick() {
         if (!hasActiveInstructionTape()) {
             queuedMoveSteps = 0;
+            queuedStepCheckInstructionData = null;
+            skipNextStandaloneCheckInstruction = false;
             clearChopTask();
             return;
         }
@@ -527,10 +532,16 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         if (queuedMoveSteps > 0) {
             if (executeQueuedMoveStep()) {
                 queuedMoveSteps--;
+                if (queuedStepCheckInstructionData != null)
+                    executeCheckBlock(queuedStepCheckInstructionData);
                 instructionCooldown = 20;
             } else {
-                queuedMoveSteps = 0;
+                // Keep move queued and retry until the obstacle is gone.
+                instructionCooldown = 20;
             }
+
+            if (queuedMoveSteps <= 0)
+                queuedStepCheckInstructionData = null;
             return;
         }
 
@@ -545,7 +556,14 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             instructionPointer = 0;
 
         ScheduleEntry entry = schedule.entries.get(instructionPointer);
-        executeInstruction(entry.instruction);
+        CompoundTag entryData = entry.instruction.getData();
+        String actionKey = entryData.getString(ACTION_KEY_TAG);
+
+        if (skipNextStandaloneCheckInstruction && "check_block".equals(actionKey)) {
+            skipNextStandaloneCheckInstruction = false;
+        } else {
+            executeInstruction(entry.instruction, schedule);
+        }
 
         instructionPointer++;
         if (instructionPointer >= schedule.entries.size())
@@ -662,7 +680,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Executes runtime logic for executeInstruction.
      */
-    private void executeInstruction(ScheduleInstruction instruction) {
+    private void executeInstruction(ScheduleInstruction instruction, Schedule schedule) {
         CompoundTag data = instruction.getData();
         String action = data.getString(ACTION_KEY_TAG);
 
@@ -672,20 +690,36 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             return;
         }
 
-        executeMoveForward(data);
+        executeMoveForward(data, schedule);
     }
 
     /**
      * Executes runtime logic for executeMoveForward.
      */
-    private void executeMoveForward(CompoundTag data) {
+    private void executeMoveForward(CompoundTag data, Schedule schedule) {
         queuedMoveDirectionIndex = data.getInt(MOVE_DIRECTION_INDEX_TAG);
         queuedMoveSteps = Math.max(1, data.getInt(MOVE_DISTANCE_INDEX_TAG) + 1);
+        queuedStepCheckInstructionData = null;
+        skipNextStandaloneCheckInstruction = false;
 
-        if (executeQueuedMoveStep())
+        int nextIndex = instructionPointer + 1;
+        if (nextIndex >= schedule.entries.size())
+            nextIndex = 0;
+
+        if (!schedule.entries.isEmpty()) {
+            ScheduleInstruction nextInstruction = schedule.entries.get(nextIndex).instruction;
+            CompoundTag nextData = nextInstruction.getData();
+            if (data.getBoolean(MOVE_STEP_CHECK_LINK_TAG) && "check_block".equals(nextData.getString(ACTION_KEY_TAG))) {
+                queuedStepCheckInstructionData = nextData.copy();
+                skipNextStandaloneCheckInstruction = true;
+            }
+        }
+
+        if (executeQueuedMoveStep()) {
             queuedMoveSteps--;
-        else
-            queuedMoveSteps = 0;
+            if (queuedStepCheckInstructionData != null)
+                executeCheckBlock(queuedStepCheckInstructionData);
+        }
     }
 
     /**
@@ -716,23 +750,28 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         BlockPos current = blockPosition();
         BlockPos next = current.relative(direction);
 
-        if (canMoveThrough(next) && canMoveThrough(next.above())) {
+        if (canMoveThrough(next)) {
             setPos(next.getX() + 0.5D, getY(), next.getZ() + 0.5D);
             return true;
         }
 
-        // Allow stepping up one block (e.g. from farmland onto full blocks like grass).
+        // Allow only tiny step-ups (e.g. farmland -> full block), but not full 1-block climbs.
+        BlockState nextState = level().getBlockState(next);
         BlockPos steppedFeet = next.above();
-        BlockPos steppedHead = steppedFeet.above();
-        boolean canStepUp = !canMoveThrough(next)
-                && canMoveThrough(steppedFeet)
-                && canMoveThrough(steppedHead)
-                && !level().getBlockState(next).getCollisionShape(level(), next).isEmpty();
+        double nextCollisionTop = nextState.getCollisionShape(level(), next).max(Direction.Axis.Y);
+        double stepHeight = (next.getY() + nextCollisionTop) - getY();
 
-        if (!canStepUp)
+        boolean canSmallStep = !canMoveThrough(next)
+                && canMoveThrough(steppedFeet)
+                && nextCollisionTop > 0.0D
+                && nextCollisionTop <= 1.0D
+                && stepHeight > 0.0D
+                && stepHeight <= 0.2D;
+
+        if (!canSmallStep)
             return false;
 
-        setPos(next.getX() + 0.5D, current.getY() + 1.0D, next.getZ() + 0.5D);
+        setPos(next.getX() + 0.5D, getY() + stepHeight, next.getZ() + 0.5D);
         return true;
     }
 

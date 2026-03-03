@@ -70,6 +70,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private SelectionScrollInput secondaryBackgroundInput;
     private SelectionScrollInput tertiaryBackgroundInput;
     private ScrollInput moveDistanceInput;
+    private IconButton moveLinkToggleButton;
     private Label scrollInputLabel;
     private Label secondaryScrollLabel;
     private Label tertiaryScrollLabel;
@@ -80,11 +81,13 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private final IdentityHashMap<ScheduleInstruction, Integer> checkBlockTargetSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Integer> moveDirectionSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Integer> moveDistanceSelection = new IdentityHashMap<>();
+    private final IdentityHashMap<ScheduleInstruction, Boolean> moveStepCheckLinkSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Integer> checkBlockMatchActionSelection = new IdentityHashMap<>();
     private int editingActionIndex = 0;
     private int editingCheckBlockTargetIndex = 0;
     private int editingMoveDirectionIndex = 0;
     private int editingMoveDistanceIndex = 0;
+    private boolean editingMoveStepCheckLink = false;
     private int editingCheckBlockMatchActionIndex = 0;
     private boolean scheduleSavedToServer = false;
     private boolean closeAfterSave = false;
@@ -152,14 +155,14 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private static final int MIN_MOVE_DISTANCE = 1;
     private static final int MAX_MOVE_DISTANCE = 99;
 
-    private static final String ACTION_INDEX_TAG = "PalActionIndex";
     private static final String ACTION_KEY_TAG = "PalActionKey";
     private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
     private static final String MOVE_DIRECTION_INDEX_TAG = "PalMoveDirectionIndex";
     private static final String MOVE_DISTANCE_INDEX_TAG = "PalMoveDistanceIndex";
-    private static final String CHECK_BLOCK_MATCH_ACTION_INDEX_TAG = "PalCheckBlockMatchActionIndex";
+    private static final String MOVE_STEP_CHECK_LINK_TAG = "PalMoveStepCheckLink";
     private static final String CHECK_BLOCK_MATCH_ACTION_KEY_TAG = "PalCheckBlockMatchActionKey";
     private static final String CHECK_BLOCK_MATCH_ITEM_TAG = "PalCheckBlockMatchItem";
+
 
     /**
      * Implements TapeProgramScreen behavior for the programmable pal feature.
@@ -242,6 +245,13 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         tertiaryScrollLabel = new Label(leftPos + 143, topPos + 91, CommonComponents.EMPTY).withShadow();
         scrollInputLabel = new Label(leftPos + 59, topPos + 69, CommonComponents.EMPTY).withShadow();
         editorConfirm = new IconButton(leftPos + 56 + 168, topPos + 65 + 22, AllIcons.I_CONFIRM);
+        moveLinkToggleButton = new IconButton(leftPos + 56, topPos + 87, AllIcons.I_REFRESH);
+        moveLinkToggleButton.withCallback(() -> {
+            editingMoveStepCheckLink = !editingMoveStepCheckLink;
+            moveLinkToggleButton.green = editingMoveStepCheckLink;
+            moveLinkToggleButton.getToolTip().clear();
+            moveLinkToggleButton.getToolTip().add(Component.literal("Link next Check after each Move step: " + (editingMoveStepCheckLink ? "ON" : "OFF")));
+        });
         if (allowDeletion)
             editorDelete = new IconButton(leftPos + 56 - 45, topPos + 65 + 22, AllIcons.I_TRASH);
         menu.slotsActive = true;
@@ -259,6 +269,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             editingCheckBlockTargetIndex = getCheckBlockTargetIndex(instruction);
             editingMoveDirectionIndex = getMoveDirectionIndex(instruction);
             editingMoveDistanceIndex = getMoveDistanceIndex(instruction);
+            editingMoveStepCheckLink = getMoveStepCheckLinkEnabled(instruction);
             editingCheckBlockMatchActionIndex = getCheckBlockMatchActionIndex(instruction);
             updateEditorSubwidgets(editingDestination);
             if (isCheckBlockAction(editingActionIndex))
@@ -281,6 +292,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         addRenderableWidget(secondaryBackgroundInput);
         addRenderableWidget(tertiaryBackgroundInput);
         addRenderableWidget(moveDistanceInput);
+        addRenderableWidget(moveLinkToggleButton);
         addRenderableWidget(scrollInputLabel);
         addRenderableWidget(secondaryScrollLabel);
         addRenderableWidget(tertiaryScrollLabel);
@@ -289,6 +301,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             addRenderableWidget(editorDelete);
     }
 
+    /**
+     * Returns data needed by getPalInstructionTypes.
+     */
     /**
      * Returns data needed by getPalInstructionTypes.
      */
@@ -372,12 +387,23 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return Mth.clamp(stored, 0, MAX_MOVE_DISTANCE - 1);
     }
 
+
+    /**
+     * Checks whether move instruction should run the following check-block after each step.
+     */
+    private boolean getMoveStepCheckLinkEnabled(ScheduleInstruction instruction) {
+        CompoundTag data = instruction.getData();
+        if (data.contains(MOVE_STEP_CHECK_LINK_TAG))
+            return data.getBoolean(MOVE_STEP_CHECK_LINK_TAG);
+        return moveStepCheckLinkSelection.getOrDefault(instruction, false);
+    }
+
     /**
      * Manages editor UI state in updateSecondarySelector.
      */
     private void updateSecondarySelector() {
         if (secondaryBackgroundInput == null || secondaryScrollLabel == null || tertiaryBackgroundInput == null
-                || tertiaryScrollLabel == null || moveDistanceInput == null)
+                || tertiaryScrollLabel == null || moveDistanceInput == null || moveLinkToggleButton == null)
             return;
 
         refreshEditorBackgrounds();
@@ -445,6 +471,12 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         tertiaryBackgroundInput.active = true;
         tertiaryBackgroundInput.visible = true;
 
+        moveLinkToggleButton.active = true;
+        moveLinkToggleButton.visible = true;
+        moveLinkToggleButton.green = editingMoveStepCheckLink;
+        moveLinkToggleButton.getToolTip().clear();
+        moveLinkToggleButton.getToolTip().add(Component.literal("Link next Check after each Move step: " + (editingMoveStepCheckLink ? "ON" : "OFF")));
+
         menu.targetSlotsActive = 0;
         menu.ghostInventory.setStackInSlot(0, ItemStack.EMPTY);
     }
@@ -473,6 +505,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 .setState(0);
         tertiaryBackgroundInput.active = false;
         tertiaryBackgroundInput.visible = false;
+
+        moveLinkToggleButton.active = false;
+        moveLinkToggleButton.visible = false;
 
         menu.targetSlotsActive = 0;
         menu.ghostInventory.setStackInSlot(0, ItemStack.EMPTY);
@@ -537,7 +572,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         if (isMoveAction(actionIndex)) {
             int distance = getMoveDistanceIndex(instruction) + 1;
             Component direction = MOVE_DIRECTION_OPTIONS.get(getMoveDirectionIndex(instruction));
-            return Component.literal(action.getString() + " " + distance + " " + direction.getString());
+            String linked = getMoveStepCheckLinkEnabled(instruction) ? " + LinkCheck" : "";
+            return Component.literal(action.getString() + " " + distance + " " + direction.getString() + linked);
         }
 
         return action;
@@ -572,6 +608,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         removeWidget(secondaryBackgroundInput);
         removeWidget(tertiaryBackgroundInput);
         removeWidget(moveDistanceInput);
+        removeWidget(moveLinkToggleButton);
         removeWidget(scrollInputLabel);
         removeWidget(secondaryScrollLabel);
         removeWidget(tertiaryScrollLabel);
@@ -608,13 +645,17 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             if (isMoveAction(editingActionIndex)) {
                 destinationData.putInt(MOVE_DIRECTION_INDEX_TAG, editingMoveDirectionIndex);
                 destinationData.putInt(MOVE_DISTANCE_INDEX_TAG, editingMoveDistanceIndex);
+                destinationData.putBoolean(MOVE_STEP_CHECK_LINK_TAG, editingMoveStepCheckLink);
                 moveDirectionSelection.put(editingDestination, editingMoveDirectionIndex);
                 moveDistanceSelection.put(editingDestination, editingMoveDistanceIndex);
+                moveStepCheckLinkSelection.put(editingDestination, editingMoveStepCheckLink);
             } else {
                 destinationData.remove(MOVE_DIRECTION_INDEX_TAG);
                 destinationData.remove(MOVE_DISTANCE_INDEX_TAG);
+                destinationData.remove(MOVE_STEP_CHECK_LINK_TAG);
                 moveDirectionSelection.remove(editingDestination);
                 moveDistanceSelection.remove(editingDestination);
+                moveStepCheckLinkSelection.remove(editingDestination);
             }
         }
 
@@ -628,6 +669,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         secondaryBackgroundInput = null;
         tertiaryBackgroundInput = null;
         moveDistanceInput = null;
+        moveLinkToggleButton = null;
         secondaryScrollLabel = null;
         tertiaryScrollLabel = null;
         editorDelete = null;
@@ -983,6 +1025,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 if (isMoveAction(editingActionIndex)) {
                     entry.instruction.getData().putInt(MOVE_DIRECTION_INDEX_TAG, editingMoveDirectionIndex);
                     entry.instruction.getData().putInt(MOVE_DISTANCE_INDEX_TAG, editingMoveDistanceIndex);
+                    entry.instruction.getData().putBoolean(MOVE_STEP_CHECK_LINK_TAG, editingMoveStepCheckLink);
                 }
                 actionSelection.put(entry.instruction, editingActionIndex);
                 if (isCheckBlockAction(editingActionIndex)) {
@@ -992,6 +1035,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 if (isMoveAction(editingActionIndex)) {
                     moveDirectionSelection.put(entry.instruction, editingMoveDirectionIndex);
                     moveDistanceSelection.put(entry.instruction, editingMoveDistanceIndex);
+                    moveStepCheckLinkSelection.put(entry.instruction, editingMoveStepCheckLink);
                 }
                 schedule.entries.add(entry);
             }, true);
