@@ -1,11 +1,19 @@
 package com.cosmolego527.create_pp.entity.custom;
 
+import com.cosmolego527.create_pp.component.ModDataComponentTypes;
 import com.cosmolego527.create_pp.entity.ModEntities;
 import com.cosmolego527.create_pp.entity.ProgrammablePalVariant;
+import com.cosmolego527.create_pp.util.ModTags;
 import com.simibubi.create.AllItems;
+import com.simibubi.create.content.trains.schedule.Schedule;
+import com.simibubi.create.content.trains.schedule.ScheduleEntry;
+import com.simibubi.create.content.trains.schedule.destination.ScheduleInstruction;
 import net.createmod.ponder.api.level.PonderLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -21,27 +29,36 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.entity.IEntityWithComplexSpawn;
 import org.jetbrains.annotations.Nullable;
-
 public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithComplexSpawn {
     public final AnimationState idleAnimationState = new AnimationState();
     private int idleAnimationTimeout = 0;
 
-    public ItemStack itemStack;
+    public ItemStack itemStack = ItemStack.EMPTY;
 
-    public ItemStack instructions;
+    public ItemStack instructions = ItemStack.EMPTY;
 
     public int insertionDelay;
 
     public Vec3 clientPosition, vec2 = Vec3.ZERO, vec3 = Vec3.ZERO;
 
+    private int instructionPointer = 0;
+    private int instructionCooldown = 0;
+
     private static final EntityDataAccessor<Integer> DOME_COLOR =
             SynchedEntityData.defineId(ProgrammablePalEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<ItemStack> DATA_ITEM_STACK =
             SynchedEntityData.defineId(ProgrammablePalEntity.class, EntityDataSerializers.ITEM_STACK);
+
+    private static final String ACTION_KEY_TAG = "PalActionKey";
+    private static final String ACTION_INDEX_TAG = "PalActionIndex";
+    private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
+    private static final String MOVE_DIRECTION_INDEX_TAG = "PalMoveDirectionIndex";
+
 
 
     public ProgrammablePalEntity(EntityType<? extends PathfinderMob> entityTypeIn, Level level) {
@@ -86,14 +103,61 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
     @Override
     protected void registerGoals() {
-        this.goalSelector.addGoal(0, new FloatGoal(this));
+        this.goalSelector.addGoal(0, new FloatGoal(this){
+            @Override
+            public boolean canUse() {
+                return !hasActiveInstructionTape() && super.canUse();
+            }
 
-        this.goalSelector.addGoal(1, new TemptGoal(this,1.0, stack -> stack.is(AllItems.ANDESITE_ALLOY), false));
+            @Override
+            public boolean canContinueToUse() {
+                return !hasActiveInstructionTape() && super.canContinueToUse();
+            }
+        });
+        this.goalSelector.addGoal(1, new TemptGoal(this,1.0, stack -> stack.is(AllItems.ANDESITE_ALLOY), false){
+            @Override
+            public boolean canUse() {
+                return !hasActiveInstructionTape() && super.canUse();
+            }
 
-        this.goalSelector.addGoal(2, new WaterAvoidingRandomStrollGoal(this, 1.0));
-        this.goalSelector.addGoal(3, new LookAtPlayerGoal(this, Player.class, 10f));
-        this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
+            @Override
+            public boolean canContinueToUse() {
+                return !hasActiveInstructionTape() && super.canContinueToUse();
+            }
+        });
+        this.goalSelector.addGoal(2, new WaterAvoidingRandomStrollGoal(this, 1.0){
+            @Override
+            public boolean canUse() {
+                return !hasActiveInstructionTape() && super.canUse();
+            }
 
+            @Override
+            public boolean canContinueToUse() {
+                return !hasActiveInstructionTape() && super.canContinueToUse();
+            }
+        });
+        this.goalSelector.addGoal(3, new LookAtPlayerGoal(this, Player.class, 10f){
+            @Override
+            public boolean canUse() {
+                return !hasActiveInstructionTape() && super.canUse();
+            }
+
+            @Override
+            public boolean canContinueToUse() {
+                return !hasActiveInstructionTape() && super.canContinueToUse();
+            }
+        });
+        this.goalSelector.addGoal(4, new RandomLookAroundGoal(this){
+            @Override
+            public boolean canUse() {
+                return !hasActiveInstructionTape() && super.canUse();
+            }
+
+            @Override
+            public boolean canContinueToUse() {
+                return !hasActiveInstructionTape() && super.canContinueToUse();
+            }
+        });
     }
 
     @Override
@@ -120,12 +184,22 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
 
     @Override
+    protected void customServerAiStep() {
+        if (hasActiveInstructionTape())
+            return;
+        super.customServerAiStep();
+    }
+
+    @Override
     public void tick() {
         if (level() instanceof PonderLevel) {
             setDeltaMovement(getDeltaMovement().add(0, -0.06, 0));
             if (position().y < 0.125)
                 discard();
         }
+
+        if (!level().isClientSide)
+            runProgramTick();
 
         super.tick();
     }
@@ -155,6 +229,9 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         super.addAdditionalSaveData(compound);
         compound.putInt("Variant", this.getTypeVariant());
         compound.put("item", itemStack.saveOptional(level().registryAccess()));
+        compound.put("InstructionTape", instructions.saveOptional(level().registryAccess()));
+        compound.putInt("InstructionPointer", instructionPointer);
+        compound.putInt("InstructionCooldown", instructionCooldown);
     }
 
 
@@ -164,6 +241,9 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         super.readAdditionalSaveData(compound);
         this.entityData.set(DOME_COLOR, compound.getInt("Variant"));
         itemStack = ItemStack.parseOptional(level().registryAccess(), compound.getCompound("item"));
+        instructions = ItemStack.parseOptional(level().registryAccess(), compound.getCompound("InstructionTape"));
+        instructionPointer = compound.getInt("InstructionPointer");
+        instructionCooldown = compound.getInt("InstructionCooldown");
     }
 
 
@@ -189,7 +269,114 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
-        //if (player.getItemInHand(hand).getTags().anyMatch())
+        ItemStack held = player.getItemInHand(hand);
+
+        if (ModTags.AllItemTags.PROGRAMMABLE_INSTRUCTION_ITEM.matches(held)) {
+            if (!level().isClientSide) {
+                instructions = held.copyWithCount(1);
+                instructionPointer = 0;
+                instructionCooldown = 0;
+                player.displayClientMessage(Component.literal("Tape assigned to Pal."), true);
+                if (!player.getAbilities().instabuild)
+                    held.shrink(1);
+            }
+            return InteractionResult.sidedSuccess(level().isClientSide);
+        }
+
         return super.mobInteract(player, hand);
+    }
+
+    private boolean hasActiveInstructionTape() {
+        if (instructions.isEmpty())
+            return false;
+        CompoundTag programTag = instructions.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
+        return programTag != null && !programTag.isEmpty();
+    }
+
+    private void runProgramTick() {
+        if (instructionCooldown > 0)
+            instructionCooldown--;
+        if (instructionCooldown > 0)
+            return;
+
+        if (!hasActiveInstructionTape())
+            return;
+
+        CompoundTag programTag = instructions.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
+
+        Schedule schedule = Schedule.fromTag(level().registryAccess(), programTag);
+        if (schedule.entries.isEmpty())
+            return;
+
+        if (instructionPointer >= schedule.entries.size())
+            instructionPointer = 0;
+
+        ScheduleEntry entry = schedule.entries.get(instructionPointer);
+        executeInstruction(entry.instruction);
+
+        instructionPointer++;
+        if (instructionPointer >= schedule.entries.size())
+            instructionPointer = 0;
+
+        instructionCooldown = 20;
+    }
+
+    private void executeInstruction(ScheduleInstruction instruction) {
+        CompoundTag data = instruction.getData();
+        String action = data.getString(ACTION_KEY_TAG);
+
+        if (action.isBlank()) {
+            int actionIndex = data.getInt(ACTION_INDEX_TAG);
+            action = actionIndex == 1 ? "check_block" : "move";
+        }
+
+        if ("check_block".equals(action)) {
+            executeCheckBlock(data);
+            return;
+        }
+
+        executeMoveForward(data);
+    }
+
+    private void executeMoveForward(CompoundTag data) {
+        getNavigation().stop();
+
+        int directionIndex = data.getInt(MOVE_DIRECTION_INDEX_TAG);
+        Direction direction = switch (directionIndex) {
+            case 1 -> Direction.EAST;
+            case 2 -> Direction.SOUTH;
+            case 3 -> Direction.WEST;
+            default -> Direction.NORTH;
+        };
+
+        setYRot(direction.toYRot());
+        setYHeadRot(direction.toYRot());
+        yBodyRot = direction.toYRot();
+
+        BlockPos target = blockPosition().relative(direction);
+
+        BlockState stateAtFeet = level().getBlockState(target);
+        BlockState stateAtHead = level().getBlockState(target.above());
+        if (!stateAtFeet.isAir() || !stateAtHead.isAir())
+            return;
+
+        setPos(target.getX() + 0.5D, getY(), target.getZ() + 0.5D);
+    }
+
+    private void executeCheckBlock(CompoundTag data) {
+        int targetIndex = data.getInt(CHECK_BLOCK_TARGET_INDEX_TAG);
+        BlockPos checkPos = switch (targetIndex) {
+            case 1 -> blockPosition().above();
+            case 2 -> blockPosition().relative(getDirection());
+            default -> blockPosition().below();
+        };
+
+        BlockState state = level().getBlockState(checkPos);
+        String targetName = switch (targetIndex) {
+            case 1 -> "Above";
+            case 2 -> "Front";
+            default -> "Below";
+        };
+        level().players().forEach(p -> p.displayClientMessage(Component.literal("Pal Check " + targetName + ": " + state.getBlock().getName().getString()), false));
     }
 }

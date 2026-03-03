@@ -73,17 +73,34 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private Consumer<Boolean> onEditorClose;
     private final IdentityHashMap<ScheduleInstruction, Integer> actionSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Integer> checkBlockTargetSelection = new IdentityHashMap<>();
+    private final IdentityHashMap<ScheduleInstruction, Integer> moveDirectionSelection = new IdentityHashMap<>();
     private int editingActionIndex = 0;
     private int editingCheckBlockTargetIndex = 0;
+    private int editingMoveDirectionIndex = 0;
     private boolean scheduleSavedToServer = false;
     private boolean closeAfterSave = false;
     private int closeAfterSaveTicks = 0;
 
+    private static final List<String> PAL_ACTION_KEYS = List.of(
+            "move",
+            "jump",
+            "wait",
+            "check_block",
+            "if_has_item",
+            "harvest",
+            "place",
+            "go_to_storage"
+    );
+
     private static final List<Component> PAL_ACTION_OPTIONS = List.of(
             Component.literal("Move"),
+            Component.literal("Jump"),
             Component.literal("Wait"),
             Component.literal("Check Block"),
-            Component.literal("Harvest")
+            Component.literal("If Has Item"),
+            Component.literal("Harvest"),
+            Component.literal("Place"),
+            Component.literal("Go to Storage")
     );
 
     private static final List<Component> CHECK_BLOCK_TARGET_OPTIONS = List.of(
@@ -92,8 +109,18 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             Component.literal("Front")
     );
 
+    private static final List<Component> MOVE_DIRECTION_OPTIONS = List.of(
+            Component.literal("North"),
+            Component.literal("East"),
+            Component.literal("South"),
+            Component.literal("West")
+    );
+
+
     private static final String ACTION_INDEX_TAG = "PalActionIndex";
+    private static final String ACTION_KEY_TAG = "PalActionKey";
     private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
+    private static final String MOVE_DIRECTION_INDEX_TAG = "PalMoveDirectionIndex";
 
     public TapeProgramScreen(TapeProgramMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -221,16 +248,33 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return Mth.clamp(stored, 0, CHECK_BLOCK_TARGET_OPTIONS.size() - 1);
     }
 
+
+    private int getMoveDirectionIndex(ScheduleInstruction instruction) {
+        CompoundTag data = instruction.getData();
+        int stored = data.contains(MOVE_DIRECTION_INDEX_TAG) ? data.getInt(MOVE_DIRECTION_INDEX_TAG)
+                : moveDirectionSelection.getOrDefault(instruction, 0);
+        return Mth.clamp(stored, 0, MOVE_DIRECTION_OPTIONS.size() - 1);
+    }
+
     private void updateSecondarySelector() {
         if (secondaryBackgroundInput == null || secondaryScrollLabel == null)
             return;
 
-        if (editingActionIndex == 2) {
+        if (isCheckBlockAction(editingActionIndex)) {
             secondaryBackgroundInput.forOptions(CHECK_BLOCK_TARGET_OPTIONS)
                     .titled(Component.literal("Check Block"))
                     .writingTo(secondaryScrollLabel)
                     .calling(index -> editingCheckBlockTargetIndex = index)
                     .setState(editingCheckBlockTargetIndex);
+            return;
+        }
+
+        if (isMoveAction(editingActionIndex)) {
+            secondaryBackgroundInput.forOptions(MOVE_DIRECTION_OPTIONS)
+                    .titled(Component.literal("Move"))
+                    .writingTo(secondaryScrollLabel)
+                    .calling(index -> editingMoveDirectionIndex = index)
+                    .setState(editingMoveDirectionIndex);
             return;
         }
 
@@ -244,19 +288,49 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
     private int getActionIndex(ScheduleInstruction instruction) {
         CompoundTag data = instruction.getData();
+        if (data.contains(ACTION_KEY_TAG))
+            return getActionIndexByKey(data.getString(ACTION_KEY_TAG));
+
         int stored = data.contains(ACTION_INDEX_TAG) ? data.getInt(ACTION_INDEX_TAG)
                 : actionSelection.getOrDefault(instruction, 0);
         return Mth.clamp(stored, 0, PAL_ACTION_OPTIONS.size() - 1);
     }
 
+    private int getActionIndexByKey(String actionKey) {
+        int index = PAL_ACTION_KEYS.indexOf(actionKey);
+        if (index == -1)
+            return 0;
+        return Mth.clamp(index, 0, PAL_ACTION_OPTIONS.size() - 1);
+    }
+
+    private String getActionKeyForIndex(int index) {
+        int clamped = Mth.clamp(index, 0, PAL_ACTION_KEYS.size() - 1);
+        return PAL_ACTION_KEYS.get(clamped);
+    }
+
+    private boolean isCheckBlockAction(int index) {
+        return "check_block".equals(getActionKeyForIndex(index));
+    }
+
+    private boolean isMoveAction(int index) {
+        return "move".equals(getActionKeyForIndex(index));
+    }
+
     private Component getActionLabel(ScheduleInstruction instruction) {
         int actionIndex = getActionIndex(instruction);
         Component action = PAL_ACTION_OPTIONS.get(actionIndex);
-        if (actionIndex != 2)
-            return action;
 
-        Component target = CHECK_BLOCK_TARGET_OPTIONS.get(getCheckBlockTargetIndex(instruction));
-        return Component.literal(action.getString() + " (" + target.getString() + ")");
+        if (isCheckBlockAction(actionIndex)) {
+            Component target = CHECK_BLOCK_TARGET_OPTIONS.get(getCheckBlockTargetIndex(instruction));
+            return Component.literal(action.getString() + " " + target.getString());
+        }
+
+        if (isMoveAction(actionIndex)) {
+            Component direction = MOVE_DIRECTION_OPTIONS.get(getMoveDirectionIndex(instruction));
+            return Component.literal(action.getString() + " " + direction.getString());
+        }
+
+        return action;
     }
 
     private String getActionName(ScheduleInstruction instruction) {
@@ -266,6 +340,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private Pair<ItemStack, Component> getDisplaySummary(ScheduleInstruction instruction) {
         return Pair.of(ItemStack.EMPTY, getActionLabel(instruction));
     }
+
 
     protected void stopEditing() {
         confirmButton.visible = true;
@@ -289,13 +364,22 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         if (editingDestination != null) {
             CompoundTag destinationData = editingDestination.getData();
             destinationData.putInt(ACTION_INDEX_TAG, editingActionIndex);
+            destinationData.putString(ACTION_KEY_TAG, getActionKeyForIndex(editingActionIndex));
             actionSelection.put(editingDestination, editingActionIndex);
-            if (editingActionIndex == 2) {
+            if (isCheckBlockAction(editingActionIndex)) {
                 destinationData.putInt(CHECK_BLOCK_TARGET_INDEX_TAG, editingCheckBlockTargetIndex);
                 checkBlockTargetSelection.put(editingDestination, editingCheckBlockTargetIndex);
             } else {
                 destinationData.remove(CHECK_BLOCK_TARGET_INDEX_TAG);
                 checkBlockTargetSelection.remove(editingDestination);
+            }
+
+            if (isMoveAction(editingActionIndex)) {
+                destinationData.putInt(MOVE_DIRECTION_INDEX_TAG, editingMoveDirectionIndex);
+                moveDirectionSelection.put(editingDestination, editingMoveDirectionIndex);
+            } else {
+                destinationData.remove(MOVE_DIRECTION_INDEX_TAG);
+                moveDirectionSelection.remove(editingDestination);
             }
         }
 
@@ -320,6 +404,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         editorSubWidgets.clear();
         editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 121, 18), "secondary_selector_background"));
     }
+
 
     @Override
     protected void containerTick() {
@@ -619,11 +704,16 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 entry.instruction = editingDestination;
                 entry.conditions.clear();
                 entry.instruction.getData().putInt(ACTION_INDEX_TAG, editingActionIndex);
-                if (editingActionIndex == 1)
+                entry.instruction.getData().putString(ACTION_KEY_TAG, getActionKeyForIndex(editingActionIndex));
+                if (isCheckBlockAction(editingActionIndex))
                     entry.instruction.getData().putInt(CHECK_BLOCK_TARGET_INDEX_TAG, editingCheckBlockTargetIndex);
+                if (isMoveAction(editingActionIndex))
+                    entry.instruction.getData().putInt(MOVE_DIRECTION_INDEX_TAG, editingMoveDirectionIndex);
                 actionSelection.put(entry.instruction, editingActionIndex);
-                if (editingActionIndex == 1)
+                if (isCheckBlockAction(editingActionIndex))
                     checkBlockTargetSelection.put(entry.instruction, editingCheckBlockTargetIndex);
+                if (isMoveAction(editingActionIndex))
+                    moveDirectionSelection.put(entry.instruction, editingMoveDirectionIndex);
                 schedule.entries.add(entry);
             }, true);
         }
