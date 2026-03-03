@@ -18,6 +18,7 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
@@ -29,11 +30,17 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.entity.IEntityWithComplexSpawn;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayDeque;
+import java.util.HashSet;
+import java.util.Set;
+
 public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithComplexSpawn {
     public final AnimationState idleAnimationState = new AnimationState();
     private int idleAnimationTimeout = 0;
@@ -61,6 +68,9 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
     private static final String MOVE_DIRECTION_INDEX_TAG = "PalMoveDirectionIndex";
     private static final String MOVE_DISTANCE_INDEX_TAG = "PalMoveDistanceIndex";
+    private static final String CHECK_BLOCK_MATCH_ACTION_INDEX_TAG = "PalCheckBlockMatchActionIndex";
+    private static final String CHECK_BLOCK_MATCH_ACTION_KEY_TAG = "PalCheckBlockMatchActionKey";
+    private static final String CHECK_BLOCK_MATCH_ITEM_TAG = "PalCheckBlockMatchItem";
 
     public ProgrammablePalEntity(EntityType<? extends PathfinderMob> entityTypeIn, Level level) {
         super(entityTypeIn, level);
@@ -164,6 +174,17 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     @Override
     public @Nullable ItemStack getPickedResult(HitResult target) {
         return itemStack.copy();
+    }
+
+    @Override
+    public boolean isPushable() {
+        return !hasActiveInstructionTape();
+    }
+
+    @Override
+    public void push(Entity entity) {
+        if (!hasActiveInstructionTape())
+            super.push(entity);
     }
 
     public static AttributeSupplier.Builder createPalAttributes(){
@@ -407,5 +428,95 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             default -> "Below";
         };
         level().players().forEach(p -> p.displayClientMessage(Component.literal("Pal Check " + targetName + ": " + state.getBlock().getName().getString()), false));
+
+        if (!matchesConfiguredCheckBlockItem(data, state))
+            return;
+
+        String matchAction = data.getString(CHECK_BLOCK_MATCH_ACTION_KEY_TAG);
+        if (matchAction.isBlank()) {
+            int matchActionIndex = data.getInt(CHECK_BLOCK_MATCH_ACTION_INDEX_TAG);
+            matchAction = matchActionIndex == 1 ? "chop" : "harvest";
+        }
+
+        if ("chop".equals(matchAction) || "mine".equals(matchAction)) {
+            mineTreeOrBlock(checkPos, state);
+            return;
+        }
+
+        if (state.getBlock() instanceof CropBlock cropBlock && cropBlock.isMaxAge(state)) {
+            level().destroyBlock(checkPos, true, this);
+            return;
+        }
+
+        if (!state.isAir())
+            level().destroyBlock(checkPos, true, this);
+    }
+
+    private void mineTreeOrBlock(BlockPos origin, BlockState originState) {
+        if (originState.isAir())
+            return;
+
+        if (!originState.is(BlockTags.LOGS)) {
+            level().destroyBlock(origin, true, this);
+            return;
+        }
+
+        Set<BlockPos> visitedLogs = new HashSet<>();
+        Set<BlockPos> visitedLeaves = new HashSet<>();
+        ArrayDeque<BlockPos> logQueue = new ArrayDeque<>();
+        ArrayDeque<BlockPos> leafQueue = new ArrayDeque<>();
+        logQueue.add(origin);
+
+        while (!logQueue.isEmpty()) {
+            BlockPos current = logQueue.removeFirst();
+            if (!visitedLogs.add(current))
+                continue;
+
+            BlockState currentState = level().getBlockState(current);
+            if (!currentState.is(BlockTags.LOGS))
+                continue;
+
+            level().destroyBlock(current, true, this);
+
+            for (BlockPos neighbor : BlockPos.betweenClosed(current.offset(-1, -1, -1), current.offset(1, 1, 1))) {
+                BlockPos immutableNeighbor = neighbor.immutable();
+                BlockState neighborState = level().getBlockState(immutableNeighbor);
+                if (neighborState.is(BlockTags.LOGS) && !visitedLogs.contains(immutableNeighbor))
+                    logQueue.addLast(immutableNeighbor);
+                if (neighborState.is(BlockTags.LEAVES) && !visitedLeaves.contains(immutableNeighbor))
+                    leafQueue.addLast(immutableNeighbor);
+            }
+        }
+
+        while (!leafQueue.isEmpty()) {
+            BlockPos currentLeaf = leafQueue.removeFirst();
+            if (!visitedLeaves.add(currentLeaf))
+                continue;
+
+            BlockState currentLeafState = level().getBlockState(currentLeaf);
+            if (!currentLeafState.is(BlockTags.LEAVES))
+                continue;
+
+            level().destroyBlock(currentLeaf, true, this);
+
+            for (BlockPos neighbor : BlockPos.betweenClosed(currentLeaf.offset(-1, -1, -1), currentLeaf.offset(1, 1, 1))) {
+                BlockPos immutableNeighbor = neighbor.immutable();
+                if (visitedLeaves.contains(immutableNeighbor))
+                    continue;
+                if (level().getBlockState(immutableNeighbor).is(BlockTags.LEAVES))
+                    leafQueue.addLast(immutableNeighbor);
+            }
+        }
+    }
+
+    private boolean matchesConfiguredCheckBlockItem(CompoundTag data, BlockState state) {
+        if (!data.contains(CHECK_BLOCK_MATCH_ITEM_TAG) || state.isAir())
+            return false;
+
+        ItemStack configured = ItemStack.parseOptional(level().registryAccess(), data.getCompound(CHECK_BLOCK_MATCH_ITEM_TAG));
+        if (configured.isEmpty())
+            return false;
+
+        return state.getBlock().asItem() == configured.getItem();
     }
 }
