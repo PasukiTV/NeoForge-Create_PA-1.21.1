@@ -10,7 +10,12 @@ import net.minecraft.Util;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.MobRenderer;
+import net.minecraft.client.renderer.entity.RenderLayerParent;
+import net.minecraft.client.renderer.entity.layers.RenderLayer;
+import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemDisplayContext;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.Map;
 
@@ -43,6 +48,7 @@ public class ProgrammablePalRenderer extends MobRenderer<ProgrammablePalEntity, 
 
     public ProgrammablePalRenderer(EntityRendererProvider.Context context) {
         super(context, new ProgramablePalModel<>(context.bakeLayer(ProgramablePalModel.LAYER_LOCATION)), 0.3f);
+        addLayer(new HeldToolLayer(this));
     }
 
     @Override
@@ -52,7 +58,6 @@ public class ProgrammablePalRenderer extends MobRenderer<ProgrammablePalEntity, 
         //if("_neko".equals(s)){return RAINBOW_PAL;}
         return LOCATION_BY_VARIANT.get(entity.getVariant());
     }
-
     @Override
     public void render(ProgrammablePalEntity entity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         if(entity.isBaby()){
@@ -63,4 +68,36 @@ public class ProgrammablePalRenderer extends MobRenderer<ProgrammablePalEntity, 
         }
         super.render(entity, entityYaw, partialTicks, poseStack, buffer, packedLight);
     }
+
+    /**
+     * Render layer responsible for drawing the assigned tool in the Pal's hand.
+     */
+    private static class HeldToolLayer extends RenderLayer<ProgrammablePalEntity, ProgramablePalModel<ProgrammablePalEntity>> {
+
+        protected HeldToolLayer(RenderLayerParent<ProgrammablePalEntity, ProgramablePalModel<ProgrammablePalEntity>> renderer) {
+            super(renderer);
+        }
+
+        @Override
+        public void render(PoseStack poseStack, MultiBufferSource buffer, int packedLight, ProgrammablePalEntity entity,
+                           float limbSwing, float limbSwingAmount, float partialTicks, float ageInTicks,
+                           float netHeadYaw, float headPitch) {
+            ItemStack heldTool = entity.getHeldTool();
+            if (heldTool.isEmpty())
+                return;
+
+            poseStack.pushPose();
+            getParentModel().translateToRightHand(poseStack);
+            poseStack.translate(-0.02D, 0.075D, -0.02D);
+            poseStack.scale(0.55f, 0.55f, 0.55f);
+            poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(-140f));
+            poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(180f));
+            poseStack.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(-0f));
+            net.minecraft.client.Minecraft.getInstance().getItemRenderer().renderStatic(heldTool,
+                    ItemDisplayContext.THIRD_PERSON_RIGHT_HAND, packedLight, OverlayTexture.NO_OVERLAY, poseStack,
+                    buffer, entity.level(), entity.getId());
+            poseStack.popPose();
+        }
+    }
+
 }

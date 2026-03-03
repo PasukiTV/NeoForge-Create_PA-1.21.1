@@ -135,6 +135,20 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             Component.literal("West")
     );
 
+    private static final List<Component> INACTIVE_SECONDARY_OPTIONS = List.of(
+            Component.empty(),
+            Component.empty(),
+            Component.empty(),
+            Component.empty()
+    );
+
+    private static final List<Component> INACTIVE_TERTIARY_OPTIONS = List.of(
+            Component.empty(),
+            Component.empty(),
+            Component.empty(),
+            Component.empty()
+    );
+
     private static final int MIN_MOVE_DISTANCE = 1;
     private static final int MAX_MOVE_DISTANCE = 99;
 
@@ -147,6 +161,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private static final String CHECK_BLOCK_MATCH_ACTION_KEY_TAG = "PalCheckBlockMatchActionKey";
     private static final String CHECK_BLOCK_MATCH_ITEM_TAG = "PalCheckBlockMatchItem";
 
+    /**
+     * Implements TapeProgramScreen behavior for the programmable pal feature.
+     */
     public TapeProgramScreen(TapeProgramMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
         schedule = new Schedule();
@@ -157,6 +174,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         editorSubWidgets = new ModularGuiLine();
     }
 
+    /**
+     * Handles the init lifecycle step for this screen/entity.
+     */
     @Override
     protected void init() {
         AllGuiTextures bg = AllGuiTextures.SCHEDULE;
@@ -205,6 +225,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                     .startWithValue(0));
     }
 
+    /**
+     * Manages editor UI state in startEditing.
+     */
     protected void startEditing(IScheduleInput field, Consumer<Boolean> onClose, boolean allowDeletion) {
         onEditorClose = onClose;
         confirmButton.visible = false;
@@ -266,6 +289,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             addRenderableWidget(editorDelete);
     }
 
+    /**
+     * Returns data needed by getPalInstructionTypes.
+     */
     private List<Pair<ResourceLocation, Supplier<? extends ScheduleInstruction>>> getPalInstructionTypes() {
         List<Pair<ResourceLocation, Supplier<? extends ScheduleInstruction>>> filteredTypes = new ArrayList<>();
 
@@ -279,6 +305,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     }
 
 
+    /**
+     * Returns data needed by getCheckBlockTargetIndex.
+     */
     private int getCheckBlockTargetIndex(ScheduleInstruction instruction) {
         CompoundTag data = instruction.getData();
         int stored = data.contains(CHECK_BLOCK_TARGET_INDEX_TAG) ? data.getInt(CHECK_BLOCK_TARGET_INDEX_TAG)
@@ -286,22 +315,25 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return Mth.clamp(stored, 0, CHECK_BLOCK_TARGET_OPTIONS.size() - 1);
     }
 
+    /**
+     * Returns data needed by getCheckBlockMatchActionIndex.
+     */
     private int getCheckBlockMatchActionIndex(ScheduleInstruction instruction) {
         CompoundTag data = instruction.getData();
         if (data.contains(CHECK_BLOCK_MATCH_ACTION_KEY_TAG)) {
             String storedKey = data.getString(CHECK_BLOCK_MATCH_ACTION_KEY_TAG);
-            if ("mine".equals(storedKey))
-                storedKey = "chop";
             int byKey = CHECK_BLOCK_MATCH_ACTION_KEYS.indexOf(storedKey);
             if (byKey >= 0)
                 return Mth.clamp(byKey, 0, CHECK_BLOCK_MATCH_ACTION_OPTIONS.size() - 1);
         }
 
-        int stored = data.contains(CHECK_BLOCK_MATCH_ACTION_INDEX_TAG) ? data.getInt(CHECK_BLOCK_MATCH_ACTION_INDEX_TAG)
-                : checkBlockMatchActionSelection.getOrDefault(instruction, 0);
-        return Mth.clamp(stored, 0, CHECK_BLOCK_MATCH_ACTION_OPTIONS.size() - 1);
+        return Mth.clamp(checkBlockMatchActionSelection.getOrDefault(instruction, 0), 0,
+                CHECK_BLOCK_MATCH_ACTION_OPTIONS.size() - 1);
     }
 
+    /**
+     * Returns data needed by getCheckBlockMatchItem.
+     */
     private ItemStack getCheckBlockMatchItem(ScheduleInstruction instruction) {
         CompoundTag data = instruction.getData();
         if (!data.contains(CHECK_BLOCK_MATCH_ITEM_TAG))
@@ -311,12 +343,18 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return ItemStack.parseOptional(provider, data.getCompound(CHECK_BLOCK_MATCH_ITEM_TAG));
     }
 
+    /**
+     * Returns data needed by getCheckBlockMatchActionKeyForIndex.
+     */
     private String getCheckBlockMatchActionKeyForIndex(int index) {
         int clamped = Mth.clamp(index, 0, CHECK_BLOCK_MATCH_ACTION_KEYS.size() - 1);
         return CHECK_BLOCK_MATCH_ACTION_KEYS.get(clamped);
     }
 
 
+    /**
+     * Returns data needed by getMoveDirectionIndex.
+     */
     private int getMoveDirectionIndex(ScheduleInstruction instruction) {
         CompoundTag data = instruction.getData();
         int stored = data.contains(MOVE_DIRECTION_INDEX_TAG) ? data.getInt(MOVE_DIRECTION_INDEX_TAG)
@@ -324,6 +362,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return Mth.clamp(stored, 0, MOVE_DIRECTION_OPTIONS.size() - 1);
     }
 
+    /**
+     * Returns data needed by getMoveDistanceIndex.
+     */
     private int getMoveDistanceIndex(ScheduleInstruction instruction) {
         CompoundTag data = instruction.getData();
         int stored = data.contains(MOVE_DISTANCE_INDEX_TAG) ? data.getInt(MOVE_DISTANCE_INDEX_TAG)
@@ -331,61 +372,88 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return Mth.clamp(stored, 0, MAX_MOVE_DISTANCE - 1);
     }
 
+    /**
+     * Manages editor UI state in updateSecondarySelector.
+     */
     private void updateSecondarySelector() {
-        if (secondaryBackgroundInput == null || secondaryScrollLabel == null || tertiaryBackgroundInput == null || tertiaryScrollLabel == null || moveDistanceInput == null)
+        if (secondaryBackgroundInput == null || secondaryScrollLabel == null || tertiaryBackgroundInput == null
+                || tertiaryScrollLabel == null || moveDistanceInput == null)
             return;
 
         refreshEditorBackgrounds();
 
         if (isCheckBlockAction(editingActionIndex)) {
-            secondaryBackgroundInput.forOptions(CHECK_BLOCK_TARGET_OPTIONS)
-                    .titled(Component.literal("Target"))
-                    .writingTo(secondaryScrollLabel)
-                    .calling(index -> editingCheckBlockTargetIndex = index)
-                    .setState(editingCheckBlockTargetIndex);
-            secondaryBackgroundInput.active = true;
-            secondaryBackgroundInput.visible = true;
-
-            moveDistanceInput.active = false;
-            moveDistanceInput.visible = false;
-
-            tertiaryBackgroundInput.forOptions(CHECK_BLOCK_MATCH_ACTION_OPTIONS)
-                    .titled(Component.literal("On Match"))
-                    .writingTo(tertiaryScrollLabel)
-                    .calling(index -> editingCheckBlockMatchActionIndex = index)
-                    .setState(editingCheckBlockMatchActionIndex);
-            tertiaryBackgroundInput.active = true;
-            tertiaryBackgroundInput.visible = true;
-            menu.targetSlotsActive = 1;
+            configureCheckBlockInputs();
             return;
         }
 
         if (isMoveAction(editingActionIndex)) {
-            moveDistanceInput.withRange(MIN_MOVE_DISTANCE, MAX_MOVE_DISTANCE + 1)
-                    .titled(Component.literal("Distance"))
-                    .writingTo(secondaryScrollLabel)
-                    .calling(value -> editingMoveDistanceIndex = Mth.clamp(value - 1, 0, MAX_MOVE_DISTANCE - 1))
-                    .setState(editingMoveDistanceIndex + 1);
-
-            moveDistanceInput.active = true;
-            moveDistanceInput.visible = true;
-
-            secondaryBackgroundInput.active = false;
-            secondaryBackgroundInput.visible = false;
-
-            tertiaryBackgroundInput.forOptions(MOVE_DIRECTION_OPTIONS)
-                    .titled(Component.literal("Direction"))
-                    .writingTo(tertiaryScrollLabel)
-                    .calling(index -> editingMoveDirectionIndex = index)
-                    .setState(editingMoveDirectionIndex);
-            tertiaryBackgroundInput.active = true;
-            tertiaryBackgroundInput.visible = true;
-            menu.targetSlotsActive = 0;
-            menu.ghostInventory.setStackInSlot(0, ItemStack.EMPTY);
+            configureMoveInputs();
             return;
         }
 
-        secondaryBackgroundInput.forOptions(List.of(Component.empty()))
+        configureInactiveInputs();
+    }
+
+    /**
+     * Applies selector setup for the check-block action.
+     */
+    private void configureCheckBlockInputs() {
+        secondaryBackgroundInput.forOptions(CHECK_BLOCK_TARGET_OPTIONS)
+                .titled(Component.literal("Target"))
+                .writingTo(secondaryScrollLabel)
+                .calling(index -> editingCheckBlockTargetIndex = index)
+                .setState(editingCheckBlockTargetIndex);
+        secondaryBackgroundInput.active = true;
+        secondaryBackgroundInput.visible = true;
+
+        moveDistanceInput.active = false;
+        moveDistanceInput.visible = false;
+
+        tertiaryBackgroundInput.forOptions(CHECK_BLOCK_MATCH_ACTION_OPTIONS)
+                .titled(Component.literal("On Match"))
+                .writingTo(tertiaryScrollLabel)
+                .calling(index -> editingCheckBlockMatchActionIndex = index)
+                .setState(editingCheckBlockMatchActionIndex);
+        tertiaryBackgroundInput.active = true;
+        tertiaryBackgroundInput.visible = true;
+
+        menu.targetSlotsActive = 1;
+    }
+
+    /**
+     * Applies selector setup for the move action.
+     */
+    private void configureMoveInputs() {
+        moveDistanceInput.withRange(MIN_MOVE_DISTANCE, MAX_MOVE_DISTANCE + 1)
+                .titled(Component.literal("Distance"))
+                .writingTo(secondaryScrollLabel)
+                .calling(value -> editingMoveDistanceIndex = Mth.clamp(value - 1, 0, MAX_MOVE_DISTANCE - 1))
+                .setState(editingMoveDistanceIndex + 1);
+
+        moveDistanceInput.active = true;
+        moveDistanceInput.visible = true;
+
+        secondaryBackgroundInput.active = false;
+        secondaryBackgroundInput.visible = false;
+
+        tertiaryBackgroundInput.forOptions(MOVE_DIRECTION_OPTIONS)
+                .titled(Component.literal("Direction"))
+                .writingTo(tertiaryScrollLabel)
+                .calling(index -> editingMoveDirectionIndex = index)
+                .setState(editingMoveDirectionIndex);
+        tertiaryBackgroundInput.active = true;
+        tertiaryBackgroundInput.visible = true;
+
+        menu.targetSlotsActive = 0;
+        menu.ghostInventory.setStackInSlot(0, ItemStack.EMPTY);
+    }
+
+    /**
+     * Applies a safe inactive state for selectors when no secondary inputs are needed.
+     */
+    private void configureInactiveInputs() {
+        secondaryBackgroundInput.forOptions(INACTIVE_SECONDARY_OPTIONS)
                 .titled(Component.empty())
                 .writingTo(secondaryScrollLabel)
                 .calling(index -> {
@@ -397,7 +465,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         moveDistanceInput.active = false;
         moveDistanceInput.visible = false;
 
-        tertiaryBackgroundInput.forOptions(List.of(Component.empty()))
+        tertiaryBackgroundInput.forOptions(INACTIVE_TERTIARY_OPTIONS)
                 .titled(Component.empty())
                 .writingTo(tertiaryScrollLabel)
                 .calling(index -> {
@@ -405,20 +473,25 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 .setState(0);
         tertiaryBackgroundInput.active = false;
         tertiaryBackgroundInput.visible = false;
+
         menu.targetSlotsActive = 0;
         menu.ghostInventory.setStackInSlot(0, ItemStack.EMPTY);
     }
 
+    /**
+     * Returns data needed by getActionIndex.
+     */
     private int getActionIndex(ScheduleInstruction instruction) {
         CompoundTag data = instruction.getData();
         if (data.contains(ACTION_KEY_TAG))
             return getActionIndexByKey(data.getString(ACTION_KEY_TAG));
 
-        int stored = data.contains(ACTION_INDEX_TAG) ? data.getInt(ACTION_INDEX_TAG)
-                : actionSelection.getOrDefault(instruction, 0);
-        return Mth.clamp(stored, 0, PAL_ACTION_OPTIONS.size() - 1);
+        return Mth.clamp(actionSelection.getOrDefault(instruction, 0), 0, PAL_ACTION_OPTIONS.size() - 1);
     }
 
+    /**
+     * Returns data needed by getActionIndexByKey.
+     */
     private int getActionIndexByKey(String actionKey) {
         int index = PAL_ACTION_KEYS.indexOf(actionKey);
         if (index == -1)
@@ -426,19 +499,31 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return Mth.clamp(index, 0, PAL_ACTION_OPTIONS.size() - 1);
     }
 
+    /**
+     * Returns data needed by getActionKeyForIndex.
+     */
     private String getActionKeyForIndex(int index) {
         int clamped = Mth.clamp(index, 0, PAL_ACTION_KEYS.size() - 1);
         return PAL_ACTION_KEYS.get(clamped);
     }
 
+    /**
+     * Checks the state used by isCheckBlockAction.
+     */
     private boolean isCheckBlockAction(int index) {
         return "check_block".equals(getActionKeyForIndex(index));
     }
 
+    /**
+     * Checks the state used by isMoveAction.
+     */
     private boolean isMoveAction(int index) {
         return "move".equals(getActionKeyForIndex(index));
     }
 
+    /**
+     * Returns data needed by getActionLabel.
+     */
     private Component getActionLabel(ScheduleInstruction instruction) {
         int actionIndex = getActionIndex(instruction);
         Component action = PAL_ACTION_OPTIONS.get(actionIndex);
@@ -458,14 +543,23 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return action;
     }
 
+    /**
+     * Returns data needed by getActionName.
+     */
     private String getActionName(ScheduleInstruction instruction) {
         return getActionLabel(instruction).getString();
     }
 
+    /**
+     * Returns data needed by getDisplaySummary.
+     */
     private Pair<ItemStack, Component> getDisplaySummary(ScheduleInstruction instruction) {
         return Pair.of(ItemStack.EMPTY, getActionLabel(instruction));
     }
 
+    /**
+     * Manages editor UI state in stopEditing.
+     */
     protected void stopEditing() {
         confirmButton.visible = true;
         cyclicButton.visible = true;
@@ -491,12 +585,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
         if (editingDestination != null) {
             CompoundTag destinationData = editingDestination.getData();
-            destinationData.putInt(ACTION_INDEX_TAG, editingActionIndex);
             destinationData.putString(ACTION_KEY_TAG, getActionKeyForIndex(editingActionIndex));
             actionSelection.put(editingDestination, editingActionIndex);
             if (isCheckBlockAction(editingActionIndex)) {
                 destinationData.putInt(CHECK_BLOCK_TARGET_INDEX_TAG, editingCheckBlockTargetIndex);
-                destinationData.putInt(CHECK_BLOCK_MATCH_ACTION_INDEX_TAG, editingCheckBlockMatchActionIndex);
                 destinationData.putString(CHECK_BLOCK_MATCH_ACTION_KEY_TAG, getCheckBlockMatchActionKeyForIndex(editingCheckBlockMatchActionIndex));
                 ItemStack matchItem = menu.ghostInventory.getStackInSlot(0);
                 if (matchItem.isEmpty())
@@ -507,7 +599,6 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 checkBlockMatchActionSelection.put(editingDestination, editingCheckBlockMatchActionIndex);
             } else {
                 destinationData.remove(CHECK_BLOCK_TARGET_INDEX_TAG);
-                destinationData.remove(CHECK_BLOCK_MATCH_ACTION_INDEX_TAG);
                 destinationData.remove(CHECK_BLOCK_MATCH_ACTION_KEY_TAG);
                 destinationData.remove(CHECK_BLOCK_MATCH_ITEM_TAG);
                 checkBlockTargetSelection.remove(editingDestination);
@@ -544,11 +635,17 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         init();
     }
 
+    /**
+     * Manages editor UI state in updateEditorSubwidgets.
+     */
     protected void updateEditorSubwidgets(IScheduleInput field) {
         menu.targetSlotsActive = isCheckBlockAction(editingActionIndex) ? 1 : field.slotsTargeted();
         refreshEditorBackgrounds();
     }
 
+    /**
+     * Manages editor UI state in refreshEditorBackgrounds.
+     */
     private void refreshEditorBackgrounds() {
         editorSubWidgets.forEach(this::removeWidget);
         editorSubWidgets.clear();
@@ -565,6 +662,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         }
     }
 
+
+    /**
+     * Handles the containerTick lifecycle step for this screen/entity.
+     */
     @Override
     protected void containerTick() {
         super.containerTick();
@@ -584,7 +685,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 schedule.entries.isEmpty() ? 0 : Mth.clamp(schedule.savedProgress, 0, schedule.entries.size() - 1);
     }
 
-
+    /**
+     * Handles the render lifecycle step for this screen/entity.
+     */
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         partialTicks = minecraft.getTimer().getGameTimeDeltaPartialTick(false);
@@ -600,6 +703,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         }
     }
 
+    /**
+     * Implements renderSchedule behavior for the programmable pal feature.
+     */
     protected void renderSchedule(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         PoseStack matrixStack = graphics.pose();
         UIRenderHelper.swapAndBlitColor(minecraft.getMainRenderTarget(), UIRenderHelper.framebuffer);
@@ -758,6 +864,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private Component rClickToDelete = CreateLang.translateDirect("gui.schedule.rmb_remove")
             .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC);
 
+    /**
+     * Processes action input handling for the screen.
+     */
     public boolean action(@Nullable GuiGraphics graphics, double mouseX, double mouseY, int click) {
         if (editingCondition != null || editingDestination != null)
             return false;
@@ -863,11 +972,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 ScheduleEntry entry = new ScheduleEntry();
                 entry.instruction = editingDestination;
                 entry.conditions.clear();
-                entry.instruction.getData().putInt(ACTION_INDEX_TAG, editingActionIndex);
                 entry.instruction.getData().putString(ACTION_KEY_TAG, getActionKeyForIndex(editingActionIndex));
                 if (isCheckBlockAction(editingActionIndex)) {
                     entry.instruction.getData().putInt(CHECK_BLOCK_TARGET_INDEX_TAG, editingCheckBlockTargetIndex);
-                    entry.instruction.getData().putInt(CHECK_BLOCK_MATCH_ACTION_INDEX_TAG, editingCheckBlockMatchActionIndex);
                     entry.instruction.getData().putString(CHECK_BLOCK_MATCH_ACTION_KEY_TAG, getCheckBlockMatchActionKeyForIndex(editingCheckBlockMatchActionIndex));
                     ItemStack matchItem = menu.ghostInventory.getStackInSlot(0);
                     if (!matchItem.isEmpty())
@@ -892,11 +999,17 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return true;
     }
 
+    /**
+     * Implements renderActionTooltip behavior for the programmable pal feature.
+     */
     private void renderActionTooltip(@Nullable GuiGraphics graphics, List<Component> tooltip, int mx, int my) {
         if (graphics != null)
             graphics.renderTooltip(font, tooltip, Optional.empty(), mx, my);
     }
 
+    /**
+     * Returns data needed by getFieldSize.
+     */
     private int getFieldSize(int minSize, Pair<ItemStack, Component> pair) {
         ItemStack stack = pair.getFirst();
         Component text = pair.getSecond();
@@ -904,6 +1017,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return Math.max((text == null ? 0 : font.width(text)) + (hasItem ? 20 : 0) + 16, minSize);
     }
 
+    /**
+     * Processes mouseClicked input handling for the screen.
+     */
     @Override
     public boolean mouseClicked(double pMouseX, double pMouseY, int pButton) {
         if (editorConfirm != null && editorConfirm.isMouseOver(pMouseX, pMouseY) && onEditorClose != null) {
@@ -922,6 +1038,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return super.mouseClicked(pMouseX, pMouseY, pButton);
     }
 
+    /**
+     * Processes keyPressed input handling for the screen.
+     */
     @Override
     public boolean keyPressed(int pKeyCode, int pScanCode, int pModifiers) {
         if (editingCondition == null && editingDestination == null)
@@ -937,6 +1056,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return super.keyPressed(pKeyCode, pScanCode, pModifiers);
     }
 
+    /**
+     * Processes mouseScrolled input handling for the screen.
+     */
     @Override
     public boolean mouseScrolled(double pMouseX, double pMouseY, double pScrollX, double pScrollY) {
         if (editingCondition != null || editingDestination != null)
@@ -956,6 +1078,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return super.mouseScrolled(pMouseX, pMouseY, pScrollX, pScrollY);
     }
 
+    /**
+     * Handles the renderForeground lifecycle step for this screen/entity.
+     */
     @Override
     protected void renderForeground(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         super.renderForeground(graphics, mouseX, mouseY, partialTicks);
@@ -988,6 +1113,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         }
     }
 
+    /**
+     * Handles the renderBg lifecycle step for this screen/entity.
+     */
     @Override
     protected void renderBg(GuiGraphics graphics, float pPartialTick, int pMouseX, int pMouseY) {
         AllGuiTextures.SCHEDULE.render(graphics, leftPos, topPos);
@@ -1029,6 +1157,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         pPoseStack.popPose();
     }
 
+    /**
+     * Implements saveProgram behavior for the programmable pal feature.
+     */
     private void saveProgram() {
         if (scheduleSavedToServer)
             return;
@@ -1038,23 +1169,35 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         PacketDistributor.sendToServer(new SaveTapeProgramPacket(scheduleTag));
     }
 
+    /**
+     * Implements saveAndClose behavior for the programmable pal feature.
+     */
     private void saveAndClose() {
         saveProgram();
         closeAfterSave = true;
         closeAfterSaveTicks = 2;
     }
 
+    /**
+     * Implements removed behavior for the programmable pal feature.
+     */
     @Override
     public void removed() {
         saveProgram();
         super.removed();
     }
 
+    /**
+     * Returns data needed by getExtraAreas.
+     */
     @Override
     public List<Rect2i> getExtraAreas() {
         return extraAreas;
     }
 
+    /**
+     * Returns data needed by getFont.
+     */
     public Font getFont() {
         return font;
     }

@@ -25,11 +25,13 @@ public class ProgramablePalModel<T extends ProgrammablePalEntity> extends Hierar
 
     private final ModelPart body;
     private final ModelPart head;
+    private final ModelPart armR;
 
     public ProgramablePalModel(ModelPart root) {
         super(RenderType::entityTranslucent);
         this.body = root.getChild("Body");
         this.head = this.body.getChild("Head");
+        this.armR = this.body.getChild("ArmR");
     }
 
     public static LayerDefinition createBodyLayer() {
@@ -72,6 +74,15 @@ public class ProgramablePalModel<T extends ProgrammablePalEntity> extends Hierar
 
         this.head.yRot = headYaw * ((float)Math.PI/180f);
         this.head.xRot = headPitch * ((float)Math.PI/180f);
+    }
+
+    /**
+     * Applies model transforms to the right hand so render layers can attach held items.
+     */
+    public void translateToRightHand(PoseStack poseStack) {
+        this.body.translateAndRotate(poseStack);
+        this.armR.translateAndRotate(poseStack);
+        poseStack.translate(0.0D, 0.15D, -0.1D);
     }
 
     @Override

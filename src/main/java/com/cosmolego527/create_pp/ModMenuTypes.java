@@ -1,5 +1,7 @@
 package com.cosmolego527.create_pp;
 
+import com.cosmolego527.create_pp.entity.client.ProgrammablePalScreen;
+import com.cosmolego527.create_pp.entity.menu.ProgrammablePalMenu;
 import com.cosmolego527.create_pp.item.logistics.functions.program.TapeProgramMenu;
 import com.cosmolego527.create_pp.item.logistics.functions.program.TapeProgramScreen;
 import com.tterrag.registrate.builders.MenuBuilder;
@@ -13,6 +15,9 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 public class ModMenuTypes {
     public static final MenuEntry<TapeProgramMenu> TAPE_PROGRAM_MENU =
             register("tape_program_menu", TapeProgramMenu::new, () -> TapeProgramScreen::new);
+
+    public static final MenuEntry<ProgrammablePalMenu> PROGRAMMABLE_PAL_MENU =
+            register("programmable_pal_menu", ProgrammablePalMenu::new, () -> ProgrammablePalScreen::new);
 
 
     private static <C extends AbstractContainerMenu, S extends Screen & MenuAccess<C>> MenuEntry<C> register(
