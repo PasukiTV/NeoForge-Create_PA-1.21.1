@@ -16,6 +16,7 @@ public class ModItemModelProvider extends ItemModelProvider {
 
         basicItem(ModItems.AUTOMATON_PROCESSOR.get());
 
+        basicItem(ModItems.PROGRAMMABLE_TAPE.get());
         basicItem(ModItems.VOID_FUNCTION_TAPE.get());
         basicItem(ModItems.BOOL_FUNCTION_TAPE.get());
         basicItem(ModItems.STRING_FUNCTION_TAPE.get());

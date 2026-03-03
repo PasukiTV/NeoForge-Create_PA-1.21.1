@@ -32,9 +32,10 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
     private FunctionType type;
 
     public enum FunctionType {
-        BOOL, INT, STRING, VOID, FLOAT;
+        TAPE, BOOL, INT, STRING, VOID, FLOAT;
     }
 
+    public static FunctionTapeItem programmableTapeItem(Properties properties) {return new FunctionTapeItem(FunctionType.TAPE, properties);}
     public static FunctionTapeItem boolFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.BOOL, properties);}
     public static FunctionTapeItem intFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.INT, properties);}
     public static FunctionTapeItem stringFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.STRING, properties);}
@@ -55,7 +56,7 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
     @Override
     public InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
         ItemStack heldItem = player.getItemInHand(hand);
-        if (type != FunctionType.VOID)
+        if (type != FunctionType.TAPE)
             return InteractionResultHolder.pass(heldItem);
 
         if (!player.isShiftKeyDown() && hand == InteractionHand.MAIN_HAND) {
@@ -79,7 +80,7 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
         //    return PackageFilterMenu.create(id, inv, heldItem);
         //if (type == FunctionType.VOID)
         //    return new VoidFunctionMenu(ModMenuTypes.VOID_FUNCTION_MENU.get(), id, inv, heldItem);
-        if (type != FunctionType.VOID)
+        if (type != FunctionType.TAPE)
             return null;
         ItemStack heldItem = player.getMainHandItem();
         return new TapeProgramMenu(ModMenuTypes.TAPE_PROGRAM_MENU.get(), id, inv, heldItem);
@@ -93,7 +94,7 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
 
     public static ItemStackHandler getFilterItems(ItemStack stack) {
         ItemStackHandler newInv = new ItemStackHandler(18);
-        if (ModItems.VOID_FUNCTION_TAPE.get() != stack.getItem())
+        if (ModItems.PROGRAMMABLE_TAPE.get() != stack.getItem())
             throw new IllegalArgumentException("Cannot get filter items from non-filter: " + stack);
         if (!stack.has(AllDataComponents.FILTER_ITEMS))
             return newInv;
@@ -109,6 +110,7 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
     @Override
     public DataComponentType<?> getComponentType() {
         return switch (type) {
+            case TAPE -> null;
             case BOOL -> AllDataComponents.FILTER_ITEMS;
             case INT -> AllDataComponents.ATTRIBUTE_FILTER_MATCHED_ATTRIBUTES;
             case STRING, FLOAT -> AllDataComponents.PACKAGE_ADDRESS;

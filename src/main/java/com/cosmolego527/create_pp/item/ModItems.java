@@ -19,7 +19,12 @@ public class ModItems {
             CreatePP.REGISTRATE.item("automaton_processor", Item::new)
                     .register();
 
-    public static final ItemEntry<FunctionTapeItem> VOID_FUNCTION_TAPE =
+
+    public static final ItemEntry<FunctionTapeItem>
+            PROGRAMMABLE_TAPE =
+            CreatePP.REGISTRATE.item("programmable_tape", FunctionTapeItem::programmableTapeItem)
+                    .register(),
+            VOID_FUNCTION_TAPE =
             CreatePP.REGISTRATE.item("void_function_tape", FunctionTapeItem::voidFuncItem)
                     .register(),
             BOOL_FUNCTION_TAPE =

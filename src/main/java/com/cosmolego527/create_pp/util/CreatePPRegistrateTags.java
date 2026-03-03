@@ -31,7 +31,7 @@ public class CreatePPRegistrateTags {
     public static void addGenerators() {
         REGISTRATE.addDataGenerator(ProviderType.BLOCK_TAGS, CreatePPRegistrateTags::genBlockTags);
         REGISTRATE.addDataGenerator(ProviderType.ITEM_TAGS, CreatePPRegistrateTags::genItemTags);
-        REGISTRATE.addDataGenerator(ProviderType.FLUID_TAGS, CreatePPRegistrateTags::genFluidTags);
+        //REGISTRATE.addDataGenerator(ProviderType.FLUID_TAGS, CreatePPRegistrateTags::genFluidTags);
         REGISTRATE.addDataGenerator(ProviderType.ENTITY_TAGS, CreatePPRegistrateTags::genEntityTags);
     }
 
@@ -71,10 +71,7 @@ public class CreatePPRegistrateTags {
                                 ModItems.PROGRAMMABLE_PAL_KIT_DEFAULT.get()
                         );
         prov.tag(ModTags.AllItemTags.PROGRAMMABLE_INSTRUCTION_ITEM.tag)
-                .add(ModItems.VOID_FUNCTION_TAPE.get()
-                        /*future remote instruction*/
-                );
-        // VALIDATE
+                .add(ModItems.PROGRAMMABLE_TAPE.get());
 
         for (ModTags.AllItemTags tag : ModTags.AllItemTags.values()) {
             if (tag.alwaysDatagen) {
@@ -84,22 +81,18 @@ public class CreatePPRegistrateTags {
     }
 
 
-    private static void genFluidTags(RegistrateTagsProvider<Fluid> provIn) {
+/*    private static void genFluidTags(RegistrateTagsProvider<Fluid> provIn) {
         TagGen.CreateTagsProvider<Fluid> prov = new TagGen.CreateTagsProvider<>(provIn, Fluid::builtInRegistryHolder);
-
-        // VALIDATE
 
         for (ModTags.AllFluidTags tag : ModTags.AllFluidTags.values()) {
             if (tag.alwaysDatagen) {
                 prov.getOrCreateRawBuilder(tag.tag);
             }
         }
-    }
+    }*/
 
     private static void genEntityTags(RegistrateTagsProvider<EntityType<?>> provIn) {
         TagGen.CreateTagsProvider<EntityType<?>> prov = new TagGen.CreateTagsProvider<>(provIn, EntityType::builtInRegistryHolder);
-
-        // VALIDATE
 
         for (ModTags.AllEntityTags tag : ModTags.AllEntityTags.values()) {
             if (tag.alwaysDatagen) {
