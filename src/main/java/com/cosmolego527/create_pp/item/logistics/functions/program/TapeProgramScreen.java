@@ -10,12 +10,8 @@ import com.simibubi.create.content.trains.schedule.condition.ScheduleWaitConditi
 import com.simibubi.create.content.trains.schedule.destination.ScheduleInstruction;
 import com.simibubi.create.foundation.gui.*;
 import com.simibubi.create.foundation.gui.menu.AbstractSimiContainerScreen;
-import com.simibubi.create.foundation.gui.widget.IconButton;
-import com.simibubi.create.foundation.gui.widget.Indicator;
+import com.simibubi.create.foundation.gui.widget.*;
 import com.simibubi.create.foundation.gui.widget.Indicator.State;
-import com.simibubi.create.foundation.gui.widget.Label;
-import com.simibubi.create.foundation.gui.widget.SelectionScrollInput;
-import com.simibubi.create.foundation.gui.widget.TooltipArea;
 import com.simibubi.create.foundation.utility.CreateLang;
 
 import net.createmod.catnip.animation.LerpedFloat;
@@ -66,17 +62,22 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private ScheduleWaitCondition editingCondition;
     private SelectionScrollInput scrollInput;
     private SelectionScrollInput secondaryBackgroundInput;
+    private SelectionScrollInput tertiaryBackgroundInput;
+    private ScrollInput moveDistanceInput;
     private Label scrollInputLabel;
     private Label secondaryScrollLabel;
+    private Label tertiaryScrollLabel;
     private IconButton editorConfirm, editorDelete;
     private ModularGuiLine editorSubWidgets;
     private Consumer<Boolean> onEditorClose;
     private final IdentityHashMap<ScheduleInstruction, Integer> actionSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Integer> checkBlockTargetSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Integer> moveDirectionSelection = new IdentityHashMap<>();
+    private final IdentityHashMap<ScheduleInstruction, Integer> moveDistanceSelection = new IdentityHashMap<>();
     private int editingActionIndex = 0;
     private int editingCheckBlockTargetIndex = 0;
     private int editingMoveDirectionIndex = 0;
+    private int editingMoveDistanceIndex = 0;
     private boolean scheduleSavedToServer = false;
     private boolean closeAfterSave = false;
     private int closeAfterSaveTicks = 0;
@@ -116,11 +117,14 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             Component.literal("West")
     );
 
+    private static final int MIN_MOVE_DISTANCE = 1;
+    private static final int MAX_MOVE_DISTANCE = 99;
 
     private static final String ACTION_INDEX_TAG = "PalActionIndex";
     private static final String ACTION_KEY_TAG = "PalActionKey";
     private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
     private static final String MOVE_DIRECTION_INDEX_TAG = "PalMoveDirectionIndex";
+    private static final String MOVE_DISTANCE_INDEX_TAG = "PalMoveDistanceIndex";
 
     public TapeProgramScreen(TapeProgramMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -187,8 +191,11 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         cyclicIndicator.visible = false;
 
         scrollInput = new SelectionScrollInput(leftPos + 56, topPos + 65, 143, 16);
-        secondaryBackgroundInput = new SelectionScrollInput(leftPos + 77, topPos + 87, 121, 16);
+        secondaryBackgroundInput = new SelectionScrollInput(leftPos + 77, topPos + 87, 58, 16);
+        tertiaryBackgroundInput = new SelectionScrollInput(leftPos + 140, topPos + 87, 58, 16);
+        moveDistanceInput = new ScrollInput(leftPos + 77, topPos + 87, 58, 16);
         secondaryScrollLabel = new Label(leftPos + 80, topPos + 91, CommonComponents.EMPTY).withShadow();
+        tertiaryScrollLabel = new Label(leftPos + 143, topPos + 91, CommonComponents.EMPTY).withShadow();
         scrollInputLabel = new Label(leftPos + 59, topPos + 69, CommonComponents.EMPTY).withShadow();
         editorConfirm = new IconButton(leftPos + 56 + 168, topPos + 65 + 22, AllIcons.I_CONFIRM);
         if (allowDeletion)
@@ -205,6 +212,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             editingDestination = instruction;
             editingActionIndex = getActionIndex(instruction);
             editingCheckBlockTargetIndex = getCheckBlockTargetIndex(instruction);
+            editingMoveDirectionIndex = getMoveDirectionIndex(instruction);
+            editingMoveDistanceIndex = getMoveDistanceIndex(instruction);
             updateEditorSubwidgets(editingDestination);
             scrollInput.forOptions(PAL_ACTION_OPTIONS)
                     .titled(Component.literal("Action"))
@@ -221,8 +230,11 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
         addRenderableWidget(scrollInput);
         addRenderableWidget(secondaryBackgroundInput);
+        addRenderableWidget(tertiaryBackgroundInput);
+        addRenderableWidget(moveDistanceInput);
         addRenderableWidget(scrollInputLabel);
         addRenderableWidget(secondaryScrollLabel);
+        addRenderableWidget(tertiaryScrollLabel);
         addRenderableWidget(editorConfirm);
         if (allowDeletion)
             addRenderableWidget(editorDelete);
@@ -256,8 +268,15 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return Mth.clamp(stored, 0, MOVE_DIRECTION_OPTIONS.size() - 1);
     }
 
+    private int getMoveDistanceIndex(ScheduleInstruction instruction) {
+        CompoundTag data = instruction.getData();
+        int stored = data.contains(MOVE_DISTANCE_INDEX_TAG) ? data.getInt(MOVE_DISTANCE_INDEX_TAG)
+                : moveDistanceSelection.getOrDefault(instruction, 0);
+        return Mth.clamp(stored, 0, MAX_MOVE_DISTANCE - 1);
+    }
+
     private void updateSecondarySelector() {
-        if (secondaryBackgroundInput == null || secondaryScrollLabel == null)
+        if (secondaryBackgroundInput == null || secondaryScrollLabel == null || tertiaryBackgroundInput == null || tertiaryScrollLabel == null || moveDistanceInput == null)
             return;
 
         if (isCheckBlockAction(editingActionIndex)) {
@@ -266,15 +285,43 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                     .writingTo(secondaryScrollLabel)
                     .calling(index -> editingCheckBlockTargetIndex = index)
                     .setState(editingCheckBlockTargetIndex);
+            secondaryBackgroundInput.active = true;
+            secondaryBackgroundInput.visible = true;
+
+            moveDistanceInput.active = false;
+            moveDistanceInput.visible = false;
+
+            tertiaryBackgroundInput.forOptions(List.of(Component.empty()))
+                    .titled(Component.empty())
+                    .writingTo(tertiaryScrollLabel)
+                    .calling(index -> {
+                    })
+                    .setState(0);
+            tertiaryBackgroundInput.active = false;
+            tertiaryBackgroundInput.visible = false;
             return;
         }
 
         if (isMoveAction(editingActionIndex)) {
-            secondaryBackgroundInput.forOptions(MOVE_DIRECTION_OPTIONS)
-                    .titled(Component.literal("Move"))
+            moveDistanceInput.withRange(MIN_MOVE_DISTANCE, MAX_MOVE_DISTANCE + 1)
+                    .titled(Component.literal("Distance"))
                     .writingTo(secondaryScrollLabel)
+                    .calling(value -> editingMoveDistanceIndex = Mth.clamp(value - 1, 0, MAX_MOVE_DISTANCE - 1))
+                    .setState(editingMoveDistanceIndex + 1);
+
+            moveDistanceInput.active = true;
+            moveDistanceInput.visible = true;
+
+            secondaryBackgroundInput.active = false;
+            secondaryBackgroundInput.visible = false;
+
+            tertiaryBackgroundInput.forOptions(MOVE_DIRECTION_OPTIONS)
+                    .titled(Component.literal("Direction"))
+                    .writingTo(tertiaryScrollLabel)
                     .calling(index -> editingMoveDirectionIndex = index)
                     .setState(editingMoveDirectionIndex);
+            tertiaryBackgroundInput.active = true;
+            tertiaryBackgroundInput.visible = true;
             return;
         }
 
@@ -284,6 +331,20 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 .calling(index -> {
                 })
                 .setState(0);
+        secondaryBackgroundInput.active = false;
+        secondaryBackgroundInput.visible = false;
+
+        moveDistanceInput.active = false;
+        moveDistanceInput.visible = false;
+
+        tertiaryBackgroundInput.forOptions(List.of(Component.empty()))
+                .titled(Component.empty())
+                .writingTo(tertiaryScrollLabel)
+                .calling(index -> {
+                })
+                .setState(0);
+        tertiaryBackgroundInput.active = false;
+        tertiaryBackgroundInput.visible = false;
     }
 
     private int getActionIndex(ScheduleInstruction instruction) {
@@ -326,8 +387,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         }
 
         if (isMoveAction(actionIndex)) {
+            int distance = getMoveDistanceIndex(instruction) + 1;
             Component direction = MOVE_DIRECTION_OPTIONS.get(getMoveDirectionIndex(instruction));
-            return Component.literal(action.getString() + " " + direction.getString());
+            return Component.literal(action.getString() + " " + distance + " " + direction.getString());
         }
 
         return action;
@@ -341,7 +403,6 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return Pair.of(ItemStack.EMPTY, getActionLabel(instruction));
     }
 
-
     protected void stopEditing() {
         confirmButton.visible = true;
         cyclicButton.visible = true;
@@ -352,8 +413,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
         removeWidget(scrollInput);
         removeWidget(secondaryBackgroundInput);
+        removeWidget(tertiaryBackgroundInput);
         removeWidget(scrollInputLabel);
         removeWidget(secondaryScrollLabel);
+        removeWidget(tertiaryScrollLabel);
         removeWidget(editorConfirm);
         removeWidget(editorDelete);
 
@@ -376,10 +439,14 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
             if (isMoveAction(editingActionIndex)) {
                 destinationData.putInt(MOVE_DIRECTION_INDEX_TAG, editingMoveDirectionIndex);
+                destinationData.putInt(MOVE_DISTANCE_INDEX_TAG, editingMoveDistanceIndex);
                 moveDirectionSelection.put(editingDestination, editingMoveDirectionIndex);
+                moveDistanceSelection.put(editingDestination, editingMoveDistanceIndex);
             } else {
                 destinationData.remove(MOVE_DIRECTION_INDEX_TAG);
+                destinationData.remove(MOVE_DISTANCE_INDEX_TAG);
                 moveDirectionSelection.remove(editingDestination);
+                moveDistanceSelection.remove(editingDestination);
             }
         }
 
@@ -391,7 +458,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         editingDestination = null;
         editorConfirm = null;
         secondaryBackgroundInput = null;
+        tertiaryBackgroundInput = null;
         secondaryScrollLabel = null;
+        tertiaryScrollLabel = null;
         editorDelete = null;
         menu.slotsActive = false;
         init();
@@ -707,13 +776,17 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 entry.instruction.getData().putString(ACTION_KEY_TAG, getActionKeyForIndex(editingActionIndex));
                 if (isCheckBlockAction(editingActionIndex))
                     entry.instruction.getData().putInt(CHECK_BLOCK_TARGET_INDEX_TAG, editingCheckBlockTargetIndex);
-                if (isMoveAction(editingActionIndex))
+                if (isMoveAction(editingActionIndex)) {
                     entry.instruction.getData().putInt(MOVE_DIRECTION_INDEX_TAG, editingMoveDirectionIndex);
+                    entry.instruction.getData().putInt(MOVE_DISTANCE_INDEX_TAG, editingMoveDistanceIndex);
+                }
                 actionSelection.put(entry.instruction, editingActionIndex);
                 if (isCheckBlockAction(editingActionIndex))
                     checkBlockTargetSelection.put(entry.instruction, editingCheckBlockTargetIndex);
-                if (isMoveAction(editingActionIndex))
+                if (isMoveAction(editingActionIndex)) {
                     moveDirectionSelection.put(entry.instruction, editingMoveDirectionIndex);
+                    moveDistanceSelection.put(entry.instruction, editingMoveDistanceIndex);
+                }
                 schedule.entries.add(entry);
             }, true);
         }

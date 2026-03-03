@@ -48,6 +48,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
     private int instructionPointer = 0;
     private int instructionCooldown = 0;
+    private int queuedMoveSteps = 0;
+    private int queuedMoveDirectionIndex = 0;
 
     private static final EntityDataAccessor<Integer> DOME_COLOR =
             SynchedEntityData.defineId(ProgrammablePalEntity.class, EntityDataSerializers.INT);
@@ -58,8 +60,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private static final String ACTION_INDEX_TAG = "PalActionIndex";
     private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
     private static final String MOVE_DIRECTION_INDEX_TAG = "PalMoveDirectionIndex";
-
-
+    private static final String MOVE_DISTANCE_INDEX_TAG = "PalMoveDistanceIndex";
 
     public ProgrammablePalEntity(EntityType<? extends PathfinderMob> entityTypeIn, Level level) {
         super(entityTypeIn, level);
@@ -232,6 +233,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         compound.put("InstructionTape", instructions.saveOptional(level().registryAccess()));
         compound.putInt("InstructionPointer", instructionPointer);
         compound.putInt("InstructionCooldown", instructionCooldown);
+        compound.putInt("QueuedMoveSteps", queuedMoveSteps);
+        compound.putInt("QueuedMoveDirectionIndex", queuedMoveDirectionIndex);
     }
 
 
@@ -244,6 +247,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         instructions = ItemStack.parseOptional(level().registryAccess(), compound.getCompound("InstructionTape"));
         instructionPointer = compound.getInt("InstructionPointer");
         instructionCooldown = compound.getInt("InstructionCooldown");
+        queuedMoveSteps = compound.getInt("QueuedMoveSteps");
+        queuedMoveDirectionIndex = compound.getInt("QueuedMoveDirectionIndex");
     }
 
 
@@ -276,6 +281,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
                 instructions = held.copyWithCount(1);
                 instructionPointer = 0;
                 instructionCooldown = 0;
+                queuedMoveSteps = 0;
+                queuedMoveDirectionIndex = 0;
                 player.displayClientMessage(Component.literal("Tape assigned to Pal."), true);
                 if (!player.getAbilities().instabuild)
                     held.shrink(1);
@@ -299,8 +306,20 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         if (instructionCooldown > 0)
             return;
 
-        if (!hasActiveInstructionTape())
+        if (!hasActiveInstructionTape()) {
+            queuedMoveSteps = 0;
             return;
+        }
+
+        if (queuedMoveSteps > 0) {
+            if (executeQueuedMoveStep()) {
+                queuedMoveSteps--;
+                instructionCooldown = 20;
+            } else {
+                queuedMoveSteps = 0;
+            }
+            return;
+        }
 
         CompoundTag programTag = instructions.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
 
@@ -339,10 +358,19 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     }
 
     private void executeMoveForward(CompoundTag data) {
+        queuedMoveDirectionIndex = data.getInt(MOVE_DIRECTION_INDEX_TAG);
+        queuedMoveSteps = Math.max(1, data.getInt(MOVE_DISTANCE_INDEX_TAG) + 1);
+
+        if (executeQueuedMoveStep())
+            queuedMoveSteps--;
+        else
+            queuedMoveSteps = 0;
+    }
+
+    private boolean executeQueuedMoveStep() {
         getNavigation().stop();
 
-        int directionIndex = data.getInt(MOVE_DIRECTION_INDEX_TAG);
-        Direction direction = switch (directionIndex) {
+        Direction direction = switch (queuedMoveDirectionIndex) {
             case 1 -> Direction.EAST;
             case 2 -> Direction.SOUTH;
             case 3 -> Direction.WEST;
@@ -353,14 +381,15 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         setYHeadRot(direction.toYRot());
         yBodyRot = direction.toYRot();
 
-        BlockPos target = blockPosition().relative(direction);
-
-        BlockState stateAtFeet = level().getBlockState(target);
-        BlockState stateAtHead = level().getBlockState(target.above());
+        BlockPos current = blockPosition();
+        BlockPos next = current.relative(direction);
+        BlockState stateAtFeet = level().getBlockState(next);
+        BlockState stateAtHead = level().getBlockState(next.above());
         if (!stateAtFeet.isAir() || !stateAtHead.isAir())
-            return;
+            return false;
 
-        setPos(target.getX() + 0.5D, getY(), target.getZ() + 0.5D);
+        setPos(next.getX() + 0.5D, getY(), next.getZ() + 0.5D);
+        return true;
     }
 
     private void executeCheckBlock(CompoundTag data) {
