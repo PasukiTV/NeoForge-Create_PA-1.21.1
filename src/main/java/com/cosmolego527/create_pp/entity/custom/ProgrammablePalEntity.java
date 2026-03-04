@@ -89,6 +89,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private ItemStack lastInstructionTapeSnapshot = ItemStack.EMPTY;
     private CompoundTag activeRunTapeProgramTag = null;
     private int activeRunTapeInstructionPointer = 0;
+    private int activeRunTapeRemainingRuns = 0;
     private int runTapeDepth = 0;
 
     private final ArrayDeque<BlockPos> pendingChopTargets = new ArrayDeque<>();
@@ -125,6 +126,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private static final String HAS_ITEM_ACTION_KEY_TAG = "PalHasItemActionKey";
     private static final String HAS_ITEM_MATCH_ITEM_TAG = "PalHasItemMatchItem";
     private static final String RUN_TAPE_ITEM_TAG = "PalRunTapeItem";
+    private static final String RUN_TAPE_REPEAT_COUNT_TAG = "PalRunTapeRepeatCount";
     private static final String COMMANDER_UUID_TAG = "CommanderUUID";
     private static final String FOLLOW_COMMANDER_TAG = "FollowCommander";
     private static final String PROGRAM_START_POS_TAG = "ProgramStartPos";
@@ -1059,29 +1061,34 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private void startRunTape(CompoundTag data) {
         if (!data.contains(RUN_TAPE_ITEM_TAG)) {
             activeRunTapeProgramTag = null;
+            activeRunTapeRemainingRuns = 0;
             return;
         }
 
         ItemStack nestedTape = ItemStack.parseOptional(level().registryAccess(), data.getCompound(RUN_TAPE_ITEM_TAG));
         if (nestedTape.isEmpty() || nestedTape.getItem() != ModItems.PROGRAMMABLE_TAPE.get()) {
             activeRunTapeProgramTag = null;
+            activeRunTapeRemainingRuns = 0;
             return;
         }
 
         CompoundTag nestedProgramTag = nestedTape.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
         if (nestedProgramTag == null || nestedProgramTag.isEmpty()) {
             activeRunTapeProgramTag = null;
+            activeRunTapeRemainingRuns = 0;
             return;
         }
 
         Schedule nestedSchedule = Schedule.fromTag(level().registryAccess(), nestedProgramTag);
         if (nestedSchedule.entries.isEmpty()) {
             activeRunTapeProgramTag = null;
+            activeRunTapeRemainingRuns = 0;
             return;
         }
 
         activeRunTapeProgramTag = nestedProgramTag.copy();
         activeRunTapeInstructionPointer = 0;
+        activeRunTapeRemainingRuns = Math.max(1, data.getInt(RUN_TAPE_REPEAT_COUNT_TAG) + 1);
     }
 
     private boolean executeActiveRunTapeStep() {
@@ -1091,11 +1098,13 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         Schedule nestedSchedule = Schedule.fromTag(level().registryAccess(), activeRunTapeProgramTag);
         if (nestedSchedule.entries.isEmpty()) {
             activeRunTapeProgramTag = null;
+            activeRunTapeRemainingRuns = 0;
             return true;
         }
 
         if (activeRunTapeInstructionPointer >= nestedSchedule.entries.size()) {
             activeRunTapeProgramTag = null;
+            activeRunTapeRemainingRuns = 0;
             return true;
         }
 
@@ -1110,8 +1119,15 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         }
 
         if (activeRunTapeInstructionPointer >= nestedSchedule.entries.size()) {
+            if (activeRunTapeRemainingRuns > 1) {
+                activeRunTapeRemainingRuns--;
+                activeRunTapeInstructionPointer = 0;
+                return false;
+            }
+
             activeRunTapeProgramTag = null;
             activeRunTapeInstructionPointer = 0;
+            activeRunTapeRemainingRuns = 0;
             return true;
         }
 
@@ -1134,10 +1150,14 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         if (nestedSchedule.entries.isEmpty())
             return;
 
+        int repeatCount = Math.max(1, data.getInt(RUN_TAPE_REPEAT_COUNT_TAG) + 1);
+
         runTapeDepth++;
         try {
-            for (ScheduleEntry entry : nestedSchedule.entries)
-                executeInstruction(entry.instruction, nestedSchedule);
+            for (int run = 0; run < repeatCount; run++) {
+                for (ScheduleEntry entry : nestedSchedule.entries)
+                    executeInstruction(entry.instruction, nestedSchedule);
+            }
         } finally {
             runTapeDepth--;
         }
@@ -1215,7 +1235,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         BlockPos checkPos = getCheckTargetPosition(targetIndex);
         BlockState state = level().getBlockState(checkPos);
 
-        //broadcastCheckResult(targetIndex, state);
+        broadcastCheckResult(targetIndex, state);
 
         if (!matchesConfiguredCheckBlockItem(data, state))
             return;

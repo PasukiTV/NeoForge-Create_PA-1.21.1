@@ -77,10 +77,12 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private SelectionScrollInput secondaryBackgroundInput;
     private SelectionScrollInput tertiaryBackgroundInput;
     private ScrollInput moveDistanceInput;
+    private SelectionScrollInput wideOptionInput;
     private IconButton moveLinkToggleButton;
     private Label scrollInputLabel;
     private Label secondaryScrollLabel;
     private Label tertiaryScrollLabel;
+    private Label wideOptionLabel;
     private IconButton editorConfirm, editorDelete;
     private ModularGuiLine editorSubWidgets;
     private Consumer<Boolean> onEditorClose;
@@ -90,12 +92,14 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private final IdentityHashMap<ScheduleInstruction, Integer> moveDistanceSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Boolean> moveStepCheckLinkSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Integer> checkBlockMatchActionSelection = new IdentityHashMap<>();
+    private final IdentityHashMap<ScheduleInstruction, Integer> runTapeRepeatSelection = new IdentityHashMap<>();
     private int editingActionIndex = 0;
     private int editingCheckBlockTargetIndex = 0;
     private int editingRotateOptionIndex = 0;
     private int editingMoveDistanceIndex = 0;
     private boolean editingMoveStepCheckLink = false;
     private int editingCheckBlockMatchActionIndex = 0;
+    private int editingRunTapeRepeatIndex = 0;
     private int editingHasItemTargetIndex = 0;
     private int editingHasItemActionIndex = 0;
     private boolean scheduleSavedToServer = false;
@@ -174,7 +178,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     );
 
     private static final int MIN_MOVE_DISTANCE = 1;
-    private static final int MAX_MOVE_DISTANCE = 99;
+    private static final int MAX_MOVE_DISTANCE = 8;
 
     private static final String ACTION_KEY_TAG = "PalActionKey";
     private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
@@ -187,7 +191,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private static final String HAS_ITEM_ACTION_KEY_TAG = "PalHasItemActionKey";
     private static final String HAS_ITEM_MATCH_ITEM_TAG = "PalHasItemMatchItem";
     private static final String RUN_TAPE_ITEM_TAG = "PalRunTapeItem";
-
+    private static final String RUN_TAPE_REPEAT_COUNT_TAG = "PalRunTapeRepeatCount";
 
     /**
      * Implements TapeProgramScreen behavior for the programmable pal feature.
@@ -285,8 +289,13 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         secondaryBackgroundInput = new SelectionScrollInput(leftPos + 77, topPos + 87, 58, 16);
         tertiaryBackgroundInput = new SelectionScrollInput(leftPos + 140, topPos + 87, 58, 16);
         moveDistanceInput = new ScrollInput(leftPos + 77, topPos + 87, 58, 16);
+        wideOptionInput = new SelectionScrollInput(leftPos + 77, topPos + 87, 121, 16);
         secondaryScrollLabel = new Label(leftPos + 80, topPos + 91, CommonComponents.EMPTY).withShadow();
         tertiaryScrollLabel = new Label(leftPos + 143, topPos + 91, CommonComponents.EMPTY).withShadow();
+        wideOptionLabel = new Label(leftPos + 80, topPos + 91, CommonComponents.EMPTY).withShadow();
+        secondaryScrollLabel.visible = false;
+        tertiaryScrollLabel.visible = false;
+        wideOptionLabel.visible = false;
         scrollInputLabel = new Label(leftPos + 59, topPos + 69, CommonComponents.EMPTY).withShadow();
         editorConfirm = new IconButton(leftPos + 56 + 168, topPos + 65 + 22, AllIcons.I_CONFIRM);
         moveLinkToggleButton = new IconButton(leftPos + 56, topPos + 87, AllIcons.I_REFRESH);
@@ -315,6 +324,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             editingMoveDistanceIndex = getMoveDistanceIndex(instruction);
             editingMoveStepCheckLink = getMoveStepCheckLinkEnabled(instruction);
             editingCheckBlockMatchActionIndex = getCheckBlockMatchActionIndex(instruction);
+            editingRunTapeRepeatIndex = getRunTapeRepeatIndex(instruction);
             editingHasItemTargetIndex = getHasItemTargetIndex(instruction);
             editingHasItemActionIndex = getHasItemActionIndex(instruction);
             updateEditorSubwidgets(editingDestination);
@@ -342,10 +352,12 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         addRenderableWidget(secondaryBackgroundInput);
         addRenderableWidget(tertiaryBackgroundInput);
         addRenderableWidget(moveDistanceInput);
+        addRenderableWidget(wideOptionInput);
         addRenderableWidget(moveLinkToggleButton);
         addRenderableWidget(scrollInputLabel);
         addRenderableWidget(secondaryScrollLabel);
         addRenderableWidget(tertiaryScrollLabel);
+        addRenderableWidget(wideOptionLabel);
         addRenderableWidget(editorConfirm);
         if (allowDeletion)
             addRenderableWidget(editorDelete);
@@ -453,6 +465,13 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return fallback == null ? ItemStack.EMPTY : fallback;
     }
 
+    private int getRunTapeRepeatIndex(ScheduleInstruction instruction) {
+        CompoundTag data = instruction.getData();
+        int stored = data.contains(RUN_TAPE_REPEAT_COUNT_TAG) ? data.getInt(RUN_TAPE_REPEAT_COUNT_TAG)
+                : runTapeRepeatSelection.getOrDefault(instruction, 0);
+        return Mth.clamp(stored, 0, MAX_MOVE_DISTANCE - 1);
+    }
+
 
     /**
      * Returns data needed by getRotateOptionIndex.
@@ -490,7 +509,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
      */
     private void updateSecondarySelector() {
         if (secondaryBackgroundInput == null || secondaryScrollLabel == null || tertiaryBackgroundInput == null
-                || tertiaryScrollLabel == null || moveDistanceInput == null || moveLinkToggleButton == null)
+                || tertiaryScrollLabel == null || moveDistanceInput == null || wideOptionInput == null
+                || wideOptionLabel == null || moveLinkToggleButton == null)
             return;
 
         refreshEditorBackgrounds();
@@ -523,6 +543,12 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         configureInactiveInputs();
     }
 
+    private void setEditorLabelVisibility(boolean secondaryVisible, boolean tertiaryVisible, boolean wideVisible) {
+        secondaryScrollLabel.visible = secondaryVisible;
+        tertiaryScrollLabel.visible = tertiaryVisible;
+        wideOptionLabel.visible = wideVisible;
+    }
+
     /**
      * Applies selector setup for the check-block action.
      */
@@ -545,6 +571,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 .setState(editingCheckBlockMatchActionIndex);
         tertiaryBackgroundInput.active = true;
         tertiaryBackgroundInput.visible = true;
+
+        wideOptionInput.active = false;
+        wideOptionInput.visible = false;
+        setEditorLabelVisibility(true, true, false);
 
         moveLinkToggleButton.active = false;
         moveLinkToggleButton.visible = false;
@@ -575,6 +605,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         tertiaryBackgroundInput.active = true;
         tertiaryBackgroundInput.visible = true;
 
+        wideOptionInput.active = false;
+        wideOptionInput.visible = false;
+        setEditorLabelVisibility(true, true, false);
+
         moveLinkToggleButton.active = false;
         moveLinkToggleButton.visible = false;
 
@@ -585,25 +619,23 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
      * Applies selector setup for the rotate action.
      */
     private void configureRotateInputs() {
-        secondaryBackgroundInput.forOptions(INACTIVE_SECONDARY_OPTIONS)
-                .titled(Component.literal("Rotate"))
-                .writingTo(secondaryScrollLabel)
-                .calling(index -> {
-                })
-                .setState(0);
         secondaryBackgroundInput.active = false;
         secondaryBackgroundInput.visible = false;
+
+        tertiaryBackgroundInput.active = false;
+        tertiaryBackgroundInput.visible = false;
 
         moveDistanceInput.active = false;
         moveDistanceInput.visible = false;
 
-        tertiaryBackgroundInput.forOptions(ROTATE_OPTIONS)
+        wideOptionInput.forOptions(ROTATE_OPTIONS)
                 .titled(Component.literal("Direction"))
-                .writingTo(tertiaryScrollLabel)
+                .writingTo(wideOptionLabel)
                 .calling(index -> editingRotateOptionIndex = index)
                 .setState(editingRotateOptionIndex);
-        tertiaryBackgroundInput.active = true;
-        tertiaryBackgroundInput.visible = true;
+        wideOptionInput.active = true;
+        wideOptionInput.visible = true;
+        setEditorLabelVisibility(false, false, true);
 
         moveLinkToggleButton.active = false;
         moveLinkToggleButton.visible = false;
@@ -616,26 +648,23 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
      * Applies selector setup for the run-tape action.
      */
     private void configureRunTapeInputs() {
-        secondaryBackgroundInput.forOptions(INACTIVE_SECONDARY_OPTIONS)
-                .titled(Component.literal("Tape"))
+        moveDistanceInput.withRange(MIN_MOVE_DISTANCE, MAX_MOVE_DISTANCE + 1)
+                .titled(Component.literal("Runs"))
                 .writingTo(secondaryScrollLabel)
-                .calling(index -> {
-                })
-                .setState(0);
+                .calling(value -> editingRunTapeRepeatIndex = Mth.clamp(value - 1, 0, MAX_MOVE_DISTANCE - 1))
+                .setState(editingRunTapeRepeatIndex + 1);
+        moveDistanceInput.active = true;
+        moveDistanceInput.visible = true;
+
         secondaryBackgroundInput.active = false;
         secondaryBackgroundInput.visible = false;
 
-        moveDistanceInput.active = false;
-        moveDistanceInput.visible = false;
-
-        tertiaryBackgroundInput.forOptions(INACTIVE_TERTIARY_OPTIONS)
-                .titled(Component.empty())
-                .writingTo(tertiaryScrollLabel)
-                .calling(index -> {
-                })
-                .setState(0);
         tertiaryBackgroundInput.active = false;
         tertiaryBackgroundInput.visible = false;
+
+        wideOptionInput.active = false;
+        wideOptionInput.visible = false;
+        setEditorLabelVisibility(true, false, false);
 
         moveLinkToggleButton.active = false;
         moveLinkToggleButton.visible = false;
@@ -666,7 +695,11 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 })
                 .setState(0);
         tertiaryBackgroundInput.active = false;
-        tertiaryBackgroundInput.visible = false;
+        tertiaryBackgroundInput.visible = true;
+
+        wideOptionInput.active = false;
+        wideOptionInput.visible = false;
+        setEditorLabelVisibility(true, true, false);
 
         moveLinkToggleButton.active = true;
         moveLinkToggleButton.visible = true;
@@ -702,6 +735,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 .setState(0);
         tertiaryBackgroundInput.active = false;
         tertiaryBackgroundInput.visible = false;
+
+        wideOptionInput.active = false;
+        wideOptionInput.visible = false;
+        setEditorLabelVisibility(false, false, false);
 
         moveLinkToggleButton.active = false;
         moveLinkToggleButton.visible = false;
@@ -800,9 +837,11 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         }
 
         if (isRunTapeAction(actionIndex)) {
+            int runs = getRunTapeRepeatIndex(instruction) + 1;
             ItemStack runTape = getRunTapeItem(instruction);
             if (!runTape.isEmpty())
-                return Component.literal(action.getString() + " " + runTape.getHoverName().getString());
+                return Component.literal(action.getString() + " x" + runs + " " + runTape.getHoverName().getString());
+            return Component.literal(action.getString() + " x" + runs);
         }
 
         return action;
@@ -822,6 +861,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return Pair.of(ItemStack.EMPTY, getActionLabel(instruction));
     }
 
+
     /**
      * Manages editor UI state in stopEditing.
      */
@@ -837,10 +877,12 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         removeWidget(secondaryBackgroundInput);
         removeWidget(tertiaryBackgroundInput);
         removeWidget(moveDistanceInput);
+        removeWidget(wideOptionInput);
         removeWidget(moveLinkToggleButton);
         removeWidget(scrollInputLabel);
         removeWidget(secondaryScrollLabel);
         removeWidget(tertiaryScrollLabel);
+        removeWidget(wideOptionLabel);
         removeWidget(editorConfirm);
         removeWidget(editorDelete);
 
@@ -887,6 +929,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
             if (isRunTapeAction(editingActionIndex)) {
                 ItemStack runTapeStack = menu.ghostInventory.getStackInSlot(0);
+                destinationData.putInt(RUN_TAPE_REPEAT_COUNT_TAG, editingRunTapeRepeatIndex);
+                runTapeRepeatSelection.put(editingDestination, editingRunTapeRepeatIndex);
                 if (runTapeStack.isEmpty() || runTapeStack.getItem() != ModItems.PROGRAMMABLE_TAPE.get()) {
                     destinationData.remove(RUN_TAPE_ITEM_TAG);
                     editingDestination.setItem(0, ItemStack.EMPTY);
@@ -896,6 +940,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 }
             } else {
                 destinationData.remove(RUN_TAPE_ITEM_TAG);
+                destinationData.remove(RUN_TAPE_REPEAT_COUNT_TAG);
+                runTapeRepeatSelection.remove(editingDestination);
             }
 
             if (isMoveAction(editingActionIndex)) {
@@ -929,9 +975,11 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         secondaryBackgroundInput = null;
         tertiaryBackgroundInput = null;
         moveDistanceInput = null;
+        wideOptionInput = null;
         moveLinkToggleButton = null;
         secondaryScrollLabel = null;
         tertiaryScrollLabel = null;
+        wideOptionLabel = null;
         editorDelete = null;
         menu.slotsActive = false;
         init();
@@ -954,11 +1002,12 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
         if (isMoveAction(editingActionIndex)) {
             editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 58, 18), "move_distance_selector_background"));
+            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 140, topPos + 87, 58, 18), "move_forward_selector_background"));
             return;
         }
 
         if (isRotateAction(editingActionIndex)) {
-            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 140, topPos + 87, 58, 18), "move_direction_selector_background"));
+            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 121, 18), "rotate_selector_background"));
             return;
         }
 
@@ -975,7 +1024,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         }
 
         if (isRunTapeAction(editingActionIndex)) {
-            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 58, 18), "check_block_target_selector_background"));
+            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 58, 18), "run_tape_runs_selector_background"));
         }
     }
 
@@ -1018,6 +1067,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             renderForeground(graphics, mouseX, mouseY, partialTicks);
         }
     }
+
 
     /**
      * Implements renderSchedule behavior for the programmable pal feature.
@@ -1304,6 +1354,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                         entry.instruction.getData().put(HAS_ITEM_MATCH_ITEM_TAG, hasItemStack.saveOptional(menu.player.registryAccess()));
                 }
                 if (isRunTapeAction(editingActionIndex)) {
+                    entry.instruction.getData().putInt(RUN_TAPE_REPEAT_COUNT_TAG, editingRunTapeRepeatIndex);
                     ItemStack runTapeStack = menu.ghostInventory.getStackInSlot(0);
                     if (!runTapeStack.isEmpty() && runTapeStack.getItem() == ModItems.PROGRAMMABLE_TAPE.get()) {
                         entry.instruction.getData().put(RUN_TAPE_ITEM_TAG, runTapeStack.saveOptional(menu.player.registryAccess()));
@@ -1328,6 +1379,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 }
                 if (isRotateAction(editingActionIndex)) {
                     rotateOptionSelection.put(entry.instruction, editingRotateOptionIndex);
+                }
+                if (isRunTapeAction(editingActionIndex)) {
+                    runTapeRepeatSelection.put(entry.instruction, editingRunTapeRepeatIndex);
                 }
                 schedule.entries.add(entry);
             }, true);
