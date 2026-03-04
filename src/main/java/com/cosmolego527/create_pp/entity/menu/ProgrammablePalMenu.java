@@ -103,4 +103,12 @@ public class ProgrammablePalMenu extends AbstractContainerMenu {
         super.removed(player);
         palInventory.stopOpen(player);
     }
+
+    public int getPalId() {
+        return pal.getId();
+    }
+
+    public void resetPalToProgramStart() {
+        pal.resetToProgramStart();
+    }
 }

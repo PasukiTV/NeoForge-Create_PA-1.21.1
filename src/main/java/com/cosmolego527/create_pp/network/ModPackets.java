@@ -13,5 +13,6 @@ public class ModPackets {
     public static void register(final RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
         registrar.playToServer(SaveTapeProgramPacket.TYPE, SaveTapeProgramPacket.STREAM_CODEC, SaveTapeProgramPacket::handle);
+        registrar.playToServer(ResetPalProgramPacket.TYPE, ResetPalProgramPacket.STREAM_CODEC, ResetPalProgramPacket::handle);
     }
 }

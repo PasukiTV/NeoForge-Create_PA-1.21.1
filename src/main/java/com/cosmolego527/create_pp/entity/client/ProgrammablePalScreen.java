@@ -1,11 +1,14 @@
 package com.cosmolego527.create_pp.entity.client;
 
 import com.cosmolego527.create_pp.entity.menu.ProgrammablePalMenu;
+import com.cosmolego527.create_pp.network.ResetPalProgramPacket;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 public class ProgrammablePalScreen extends AbstractContainerScreen<ProgrammablePalMenu> {
 
@@ -36,6 +39,16 @@ public class ProgrammablePalScreen extends AbstractContainerScreen<ProgrammableP
         guiGraphics.fill(tapeSlotX, tapeSlotY, tapeSlotX + 1, tapeSlotY + 18, 0xFFFFFFFF);
         guiGraphics.fill(tapeSlotX + 17, tapeSlotY, tapeSlotX + 18, tapeSlotY + 18, 0xFF5A5A5A);
         guiGraphics.fill(tapeSlotX, tapeSlotY + 17, tapeSlotX + 18, tapeSlotY + 18, 0xFF5A5A5A);
+    }
+
+    @Override
+    protected void init() {
+        super.init();
+        addRenderableWidget(Button.builder(Component.literal("Reset"), b ->
+                        PacketDistributor.sendToServer(new ResetPalProgramPacket(menu.getPalId())))
+                .pos(leftPos + imageWidth - 58, topPos - 20)
+                .size(50, 20)
+                .build());
     }
 
     @Override

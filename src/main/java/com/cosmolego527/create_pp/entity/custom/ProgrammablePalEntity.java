@@ -4,6 +4,7 @@ import com.cosmolego527.create_pp.entity.ModEntities;
 import com.cosmolego527.create_pp.entity.ProgrammablePalVariant;
 import com.cosmolego527.create_pp.component.ModDataComponentTypes;
 import com.cosmolego527.create_pp.entity.menu.ProgrammablePalMenu;
+import com.simibubi.create.content.logistics.filter.FilterItemStack;
 import com.simibubi.create.content.trains.schedule.Schedule;
 import com.simibubi.create.content.trains.schedule.ScheduleEntry;
 import com.simibubi.create.content.trains.schedule.destination.ScheduleInstruction;
@@ -35,6 +36,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.ContainerHelper;
@@ -89,6 +91,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
     private UUID commanderUUID = null;
     private boolean followCommander = true;
+    private BlockPos programStartPos = null;
+    private boolean programActiveLastTick = false;
 
     private static final EntityDataAccessor<Integer> DOME_COLOR =
             SynchedEntityData.defineId(ProgrammablePalEntity.class, EntityDataSerializers.INT);
@@ -219,9 +223,29 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         instructionPointer = 0;
         instructionCooldown = 0;
         queuedMoveSteps = 0;
+        queuedMoveDirectionIndex = 0;
         queuedStepCheckInstructionData = null;
         skipNextStandaloneCheckInstruction = false;
         clearChopTask();
+    }
+
+    private void captureProgramStartIfNeeded() {
+        if (!programActiveLastTick)
+            programStartPos = blockPosition();
+        programActiveLastTick = true;
+    }
+
+    private void markProgramInactive() {
+        programActiveLastTick = false;
+    }
+
+    public void resetToProgramStart() {
+        resetProgramRuntimeState();
+        setTarget(null);
+        getNavigation().stop();
+        setDeltaMovement(Vec3.ZERO);
+        if (programStartPos != null)
+            teleportTo(programStartPos.getX() + 0.5D, programStartPos.getY(), programStartPos.getZ() + 0.5D);
     }
 
     private void syncStateFromInventory() {
@@ -262,6 +286,22 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             if (stack.getItem() instanceof AxeItem)
                 return stack;
         }
+        return ItemStack.EMPTY;
+    }
+
+    private ItemStack bestCombatToolInInventory() {
+        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (stack.getItem() instanceof SwordItem)
+                return stack;
+        }
+
+        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (stack.getItem() instanceof AxeItem)
+                return stack;
+        }
+
         return ItemStack.EMPTY;
     }
 
@@ -569,6 +609,12 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         if (!(level() instanceof ServerLevel serverLevel))
             return;
 
+        ItemStack combatTool = bestCombatToolInInventory();
+        if (!combatTool.isEmpty())
+            setHeldTool(combatTool);
+        else
+            setHeldTool(ItemStack.EMPTY);
+
         Player commander = commanderUUID == null ? null : serverLevel.getPlayerByUUID(commanderUUID);
         if (commander == null)
             return;
@@ -606,6 +652,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
      */
     private void runProgramTick() {
         if (isFightTapeActive()) {
+            markProgramInactive();
             queuedMoveSteps = 0;
             queuedStepCheckInstructionData = null;
             skipNextStandaloneCheckInstruction = false;
@@ -615,12 +662,15 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         }
 
         if (!hasActiveInstructionTape()) {
+            markProgramInactive();
             queuedMoveSteps = 0;
             queuedStepCheckInstructionData = null;
             skipNextStandaloneCheckInstruction = false;
             clearChopTask();
             return;
         }
+
+        captureProgramStartIfNeeded();
 
         if (tickChopTask())
             return;
@@ -733,18 +783,61 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         return true;
     }
 
+    private boolean isAdjacentChopReach(BlockPos target) {
+        BlockPos palPos = blockPosition();
+        int dx = Math.abs(target.getX() - palPos.getX());
+        int dy = Math.abs(target.getY() - palPos.getY());
+        int dz = Math.abs(target.getZ() - palPos.getZ());
+        return dx <= 1 && dy <= 1 && dz <= 1;
+    }
+
+    private boolean queueBlockingLeavesTowardsTarget(BlockPos target) {
+        BlockPos palPos = blockPosition();
+        int stepX = Integer.compare(target.getX(), palPos.getX());
+        int stepZ = Integer.compare(target.getZ(), palPos.getZ());
+
+        BlockPos cursor = palPos;
+        boolean queuedAny = false;
+
+        for (int i = 0; i < 3; i++) {
+            cursor = cursor.offset(stepX, 0, stepZ);
+            if (level().getBlockState(cursor).is(BlockTags.LEAVES)) {
+                queueChopTarget(cursor);
+                queuedAny = true;
+            }
+
+            BlockPos above = cursor.above();
+            if (level().getBlockState(above).is(BlockTags.LEAVES)) {
+                queueChopTarget(above);
+                queuedAny = true;
+            }
+        }
+
+        return queuedAny;
+    }
+
     /**
      * Ensures there is an active target while skipping blocks that are already gone.
      */
     private boolean acquireNextChopTarget() {
         while (currentChopTarget == null && !pendingChopTargets.isEmpty()) {
             BlockPos candidate = pendingChopTargets.removeFirst();
-            if (!level().getBlockState(candidate).isAir()) {
-                currentChopTarget = candidate;
-                currentChopProgress = 0f;
-            } else {
+            BlockState candidateState = level().getBlockState(candidate);
+            if (candidateState.isAir()) {
                 queuedChopTargets.remove(candidate);
+                continue;
             }
+
+            if (candidateState.is(BlockTags.LOGS) && !isAdjacentChopReach(candidate)) {
+                boolean queuedLeaves = queueBlockingLeavesTowardsTarget(candidate);
+                if (queuedLeaves) {
+                    pendingChopTargets.addLast(candidate);
+                    continue;
+                }
+            }
+
+            currentChopTarget = candidate;
+            currentChopProgress = 0f;
         }
 
         if (currentChopTarget != null)
@@ -828,6 +921,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
      */
     private boolean canMoveThrough(BlockPos pos) {
         BlockState state = level().getBlockState(pos);
+        if (state.is(BlockTags.LEAVES))
+            return true;
         return state.getCollisionShape(level(), pos).isEmpty();
     }
 
@@ -1060,6 +1155,14 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         if (configured.isEmpty())
             return false;
 
-        return state.getBlock().asItem() == configured.getItem();
+        ItemStack target = new ItemStack(state.getBlock().asItem());
+        if (target.isEmpty())
+            return false;
+
+        FilterItemStack configuredFilter = FilterItemStack.of(configured.copy());
+        if (configuredFilter.isFilterItem())
+            return configuredFilter.test(level(), target);
+
+        return target.getItem() == configured.getItem();
     }
 }

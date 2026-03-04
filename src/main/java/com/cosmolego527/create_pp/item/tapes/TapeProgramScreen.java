@@ -443,6 +443,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         tertiaryBackgroundInput.active = true;
         tertiaryBackgroundInput.visible = true;
 
+        moveLinkToggleButton.active = false;
+        moveLinkToggleButton.visible = false;
+
         menu.targetSlotsActive = 1;
     }
 
