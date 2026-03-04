@@ -8,15 +8,21 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-public record SaveTapeProgramPacket(CompoundTag scheduleTag) implements CustomPacketPayload {
+public record SaveTapeProgramPacket(CompoundTag scheduleTag, String customName) implements CustomPacketPayload {
 
     public static final Type<SaveTapeProgramPacket> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(CreatePP.MOD_ID, "save_tape_program"));
     public static final StreamCodec<RegistryFriendlyByteBuf, SaveTapeProgramPacket> STREAM_CODEC =
-            StreamCodec.composite(ByteBufCodecs.COMPOUND_TAG, SaveTapeProgramPacket::scheduleTag, SaveTapeProgramPacket::new);
+            StreamCodec.composite(
+                    ByteBufCodecs.COMPOUND_TAG, SaveTapeProgramPacket::scheduleTag,
+                    ByteBufCodecs.STRING_UTF8, packet -> packet.customName() == null ? "" : packet.customName(),
+                    (scheduleTag, customName) -> new SaveTapeProgramPacket(scheduleTag, customName.isBlank() ? null : customName)
+            );
 
     @Override
     public Type<? extends CustomPacketPayload> type() {
@@ -34,6 +40,11 @@ public record SaveTapeProgramPacket(CompoundTag scheduleTag) implements CustomPa
                 menu.contentHolder.remove(ModDataComponentTypes.VOID_FUNCTION_DATA);
             else
                 menu.contentHolder.set(ModDataComponentTypes.VOID_FUNCTION_DATA, packet.scheduleTag().copy());
+
+            if (packet.customName() == null || packet.customName().isBlank())
+                menu.contentHolder.remove(DataComponents.CUSTOM_NAME);
+            else
+                menu.contentHolder.set(DataComponents.CUSTOM_NAME, Component.literal(packet.customName().trim()));
         });
     }
 }

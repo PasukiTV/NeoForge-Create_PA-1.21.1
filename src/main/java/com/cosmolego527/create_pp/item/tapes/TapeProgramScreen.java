@@ -26,9 +26,12 @@ import net.createmod.catnip.gui.element.GuiGameElement;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -60,6 +63,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private Schedule schedule;
 
     private IconButton confirmButton;
+    private Button renameButton;
+    private EditBox tapeNameBox;
+    private boolean renamingTapeName = false;
+    private String tapeCustomName = "";
     private IconButton cyclicButton;
     private Indicator cyclicIndicator;
 
@@ -200,6 +207,25 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         setWindowSize(bg.getWidth(), bg.getHeight());
         super.init();
         clearWidgets();
+
+        tapeCustomName = menu.contentHolder.has(DataComponents.CUSTOM_NAME)
+                ? menu.contentHolder.get(DataComponents.CUSTOM_NAME).getString()
+                : "";
+
+        tapeNameBox = new EditBox(font, leftPos + 41, topPos + 18, 150, 14, Component.literal("Tape Name"));
+        tapeNameBox.setMaxLength(48);
+        tapeNameBox.setBordered(true);
+        tapeNameBox.setValue(tapeCustomName);
+        tapeNameBox.setHint(Component.literal("Tape Name"));
+        tapeNameBox.visible = false;
+        tapeNameBox.active = false;
+        addRenderableWidget(tapeNameBox);
+
+        renameButton = Button.builder(Component.literal("✎"), b -> toggleTapeNameEditing())
+                .pos(leftPos + bg.getWidth() - 58, topPos + 2)
+                .size(14, 14)
+                .build();
+        addRenderableWidget(renameButton);
 
         confirmButton = new IconButton(leftPos + bg.getWidth() - 42, topPos + bg.getHeight() - 30, AllIcons.I_CONFIRM);
         confirmButton.withCallback(this::saveAndClose);
@@ -1283,7 +1309,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     @Override
     protected void renderBg(GuiGraphics graphics, float pPartialTick, int pMouseX, int pMouseY) {
         AllGuiTextures.SCHEDULE.render(graphics, leftPos, topPos);
-        FormattedCharSequence formattedcharsequence = title.getVisualOrderText();
+        Component headerTitle = tapeCustomName.isBlank() ? title : Component.literal(tapeCustomName);
+        FormattedCharSequence formattedcharsequence = headerTitle.getVisualOrderText();
         int center = leftPos + (AllGuiTextures.SCHEDULE.getWidth() - 8) / 2;
         graphics.drawString(font, formattedcharsequence, (float) (center - font.width(formattedcharsequence) / 2),
                 (float) topPos + 4, 0x505050, false);
@@ -1306,7 +1333,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
         IScheduleInput rendered = editingCondition == null ? editingDestination : editingCondition;
 
-        int renderedTargetSlots = isCheckBlockAction(editingActionIndex) ? 1 : rendered.slotsTargeted();
+        int renderedTargetSlots = isItemSlotAction(editingActionIndex) ? 1 : rendered.slotsTargeted();
         for (int i = 0; i < renderedTargetSlots; i++)
             AllGuiTextures.SCHEDULE_EDITOR_ADDITIONAL_SLOT.render(graphics, leftPos + 53 + 20 * i, topPos + 87);
 
@@ -1321,6 +1348,27 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         pPoseStack.popPose();
     }
 
+    private void toggleTapeNameEditing() {
+        renamingTapeName = !renamingTapeName;
+        if (renamingTapeName) {
+            tapeNameBox.visible = true;
+            tapeNameBox.active = true;
+            tapeNameBox.setValue(tapeCustomName);
+            setFocused(tapeNameBox);
+            return;
+        }
+
+        applyTapeNameFromBox();
+        tapeNameBox.visible = false;
+        tapeNameBox.active = false;
+    }
+
+    private void applyTapeNameFromBox() {
+        if (tapeNameBox == null)
+            return;
+        tapeCustomName = tapeNameBox.getValue().trim();
+    }
+
     /**
      * Implements saveProgram behavior for the programmable pal feature.
      */
@@ -1329,8 +1377,15 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             return;
         scheduleSavedToServer = true;
 
+        if (renamingTapeName) {
+            applyTapeNameFromBox();
+            renamingTapeName = false;
+            tapeNameBox.visible = false;
+            tapeNameBox.active = false;
+        }
+
         CompoundTag scheduleTag = schedule.entries.isEmpty() ? new CompoundTag() : schedule.write(menu.player.registryAccess());
-        PacketDistributor.sendToServer(new SaveTapeProgramPacket(scheduleTag));
+        PacketDistributor.sendToServer(new SaveTapeProgramPacket(scheduleTag, tapeCustomName));
     }
 
     /**
@@ -1342,19 +1397,19 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         closeAfterSaveTicks = 2;
     }
 
+    @Override
     /**
      * Implements removed behavior for the programmable pal feature.
      */
-    @Override
     public void removed() {
         saveProgram();
         super.removed();
     }
 
+    @Override
     /**
      * Returns data needed by getExtraAreas.
      */
-    @Override
     public List<Rect2i> getExtraAreas() {
         return extraAreas;
     }
