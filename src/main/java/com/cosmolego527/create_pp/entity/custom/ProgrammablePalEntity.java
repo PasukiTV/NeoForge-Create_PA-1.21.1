@@ -116,8 +116,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
     private static final String ACTION_KEY_TAG = "PalActionKey";
     private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
-    private static final String MOVE_DIRECTION_INDEX_TAG = "PalMoveDirectionIndex";
     private static final String MOVE_DISTANCE_INDEX_TAG = "PalMoveDistanceIndex";
+    private static final String ROTATE_OPTION_INDEX_TAG = "PalRotateOptionIndex";
     private static final String MOVE_STEP_CHECK_LINK_TAG = "PalMoveStepCheckLink";
     private static final String CHECK_BLOCK_MATCH_ACTION_KEY_TAG = "PalCheckBlockMatchActionKey";
     private static final String CHECK_BLOCK_MATCH_ITEM_TAG = "PalCheckBlockMatchItem";
@@ -705,10 +705,13 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
                 queuedMoveSteps--;
                 if (queuedStepCheckInstructionData != null)
                     executeCheckBlock(queuedStepCheckInstructionData);
-                instructionCooldown = 20;
+                instructionCooldown = 10;
             } else {
-                // Keep move queued and retry until the obstacle is gone.
-                instructionCooldown = 20;
+                // Re-run the linked check when a move step gets blocked to react to world changes
+                // (e.g. a sapling growing into a log between check and movement).
+                if (queuedStepCheckInstructionData != null)
+                    executeCheckBlock(queuedStepCheckInstructionData);
+                instructionCooldown = 10;
             }
 
             if (queuedMoveSteps <= 0)
@@ -720,7 +723,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             boolean finishedSubTape = executeActiveRunTapeStep();
             if (finishedSubTape)
                 advanceMainInstructionPointer();
-            instructionCooldown = 20;
+            instructionCooldown = 10;
             return;
         }
 
@@ -748,7 +751,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         if (advancePointer)
             advanceMainInstructionPointer();
 
-        instructionCooldown = 20;
+        instructionCooldown = 10;
     }
 
     /**
@@ -936,6 +939,11 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             return true;
         }
 
+        if ("rotate".equals(action)) {
+            executeRotate(data);
+            return true;
+        }
+
         if ("run_tape".equals(action)) {
             if (runTapeDepth > 0) {
                 executeRunTapeImmediate(data);
@@ -952,11 +960,28 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         return true;
     }
 
+    private void executeRotate(CompoundTag data) {
+        int option = data.getInt(ROTATE_OPTION_INDEX_TAG);
+        Direction target = switch (option) {
+            case 0 -> getDirection().getClockWise();
+            case 1 -> getDirection().getCounterClockWise();
+            case 2 -> Direction.NORTH;
+            case 3 -> Direction.EAST;
+            case 4 -> Direction.SOUTH;
+            case 5 -> Direction.WEST;
+            default -> getDirection();
+        };
+
+        setYRot(target.toYRot());
+        setYHeadRot(target.toYRot());
+        yBodyRot = target.toYRot();
+        getNavigation().stop();
+    }
+
     /**
      * Executes runtime logic for executeMoveForward.
      */
     private void executeMoveForward(CompoundTag data, Schedule schedule) {
-        queuedMoveDirectionIndex = data.getInt(MOVE_DIRECTION_INDEX_TAG);
         queuedMoveSteps = Math.max(1, data.getInt(MOVE_DISTANCE_INDEX_TAG) + 1);
         queuedStepCheckInstructionData = null;
         skipNextStandaloneCheckInstruction = false;
@@ -997,12 +1022,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private boolean executeQueuedMoveStep() {
         getNavigation().stop();
 
-        Direction direction = switch (queuedMoveDirectionIndex) {
-            case 1 -> Direction.EAST;
-            case 2 -> Direction.SOUTH;
-            case 3 -> Direction.WEST;
-            default -> Direction.NORTH;
-        };
+        Direction direction = getDirection();
 
         setYRot(direction.toYRot());
         setYHeadRot(direction.toYRot());
@@ -1195,7 +1215,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         BlockPos checkPos = getCheckTargetPosition(targetIndex);
         BlockState state = level().getBlockState(checkPos);
 
-        broadcastCheckResult(targetIndex, state);
+        //broadcastCheckResult(targetIndex, state);
 
         if (!matchesConfiguredCheckBlockItem(data, state))
             return;
