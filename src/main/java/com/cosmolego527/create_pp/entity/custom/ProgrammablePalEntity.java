@@ -4,6 +4,7 @@ import com.cosmolego527.create_pp.entity.ModEntities;
 import com.cosmolego527.create_pp.entity.ProgrammablePalVariant;
 import com.cosmolego527.create_pp.component.ModDataComponentTypes;
 import com.cosmolego527.create_pp.entity.menu.ProgrammablePalMenu;
+import com.cosmolego527.create_pp.item.ModItems;
 import com.mojang.authlib.GameProfile;
 import com.simibubi.create.content.logistics.filter.FilterItemStack;
 import com.simibubi.create.content.trains.schedule.Schedule;
@@ -86,6 +87,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private CompoundTag queuedStepCheckInstructionData = null;
     private boolean skipNextStandaloneCheckInstruction = false;
     private ItemStack lastInstructionTapeSnapshot = ItemStack.EMPTY;
+    private int runTapeDepth = 0;
 
     private final ArrayDeque<BlockPos> pendingChopTargets = new ArrayDeque<>();
     private final Set<BlockPos> queuedChopTargets = new HashSet<>();
@@ -120,6 +122,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private static final String HAS_ITEM_TARGET_INDEX_TAG = "PalHasItemTargetIndex";
     private static final String HAS_ITEM_ACTION_KEY_TAG = "PalHasItemActionKey";
     private static final String HAS_ITEM_MATCH_ITEM_TAG = "PalHasItemMatchItem";
+    private static final String RUN_TAPE_ITEM_TAG = "PalRunTapeItem";
     private static final String COMMANDER_UUID_TAG = "CommanderUUID";
     private static final String FOLLOW_COMMANDER_TAG = "FollowCommander";
     private static final String PROGRAM_START_POS_TAG = "ProgramStartPos";
@@ -238,6 +241,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         queuedMoveDirectionIndex = 0;
         queuedStepCheckInstructionData = null;
         skipNextStandaloneCheckInstruction = false;
+        runTapeDepth = 0;
         clearChopTask();
     }
 
@@ -901,6 +905,11 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             return;
         }
 
+        if ("run_tape".equals(action)) {
+            executeRunTape(data);
+            return;
+        }
+
         executeMoveForward(data, schedule);
     }
 
@@ -986,6 +995,31 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
         setPos(next.getX() + 0.5D, getY() + stepHeight, next.getZ() + 0.5D);
         return true;
+    }
+
+    private void executeRunTape(CompoundTag data) {
+        if (runTapeDepth > 4 || !data.contains(RUN_TAPE_ITEM_TAG))
+            return;
+
+        ItemStack nestedTape = ItemStack.parseOptional(level().registryAccess(), data.getCompound(RUN_TAPE_ITEM_TAG));
+        if (nestedTape.isEmpty() || nestedTape.getItem() != ModItems.PROGRAMMABLE_TAPE.get())
+            return;
+
+        CompoundTag nestedProgramTag = nestedTape.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
+        if (nestedProgramTag == null || nestedProgramTag.isEmpty())
+            return;
+
+        Schedule nestedSchedule = Schedule.fromTag(level().registryAccess(), nestedProgramTag);
+        if (nestedSchedule.entries.isEmpty())
+            return;
+
+        runTapeDepth++;
+        try {
+            for (ScheduleEntry entry : nestedSchedule.entries)
+                executeInstruction(entry.instruction, nestedSchedule);
+        } finally {
+            runTapeDepth--;
+        }
     }
 
     private void executeHasItem(CompoundTag data) {
