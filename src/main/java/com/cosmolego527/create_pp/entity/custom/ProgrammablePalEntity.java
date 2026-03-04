@@ -4,6 +4,7 @@ import com.cosmolego527.create_pp.entity.ModEntities;
 import com.cosmolego527.create_pp.entity.ProgrammablePalVariant;
 import com.cosmolego527.create_pp.component.ModDataComponentTypes;
 import com.cosmolego527.create_pp.entity.menu.ProgrammablePalMenu;
+import com.mojang.authlib.GameProfile;
 import com.simibubi.create.content.logistics.filter.FilterItemStack;
 import com.simibubi.create.content.trains.schedule.Schedule;
 import com.simibubi.create.content.trains.schedule.ScheduleEntry;
@@ -37,6 +38,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SwordItem;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.ContainerHelper;
@@ -44,8 +46,11 @@ import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.common.util.FakePlayer;
+import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.entity.IEntityWithComplexSpawn;
 import org.jetbrains.annotations.Nullable;
 
@@ -112,8 +117,15 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private static final String MOVE_STEP_CHECK_LINK_TAG = "PalMoveStepCheckLink";
     private static final String CHECK_BLOCK_MATCH_ACTION_KEY_TAG = "PalCheckBlockMatchActionKey";
     private static final String CHECK_BLOCK_MATCH_ITEM_TAG = "PalCheckBlockMatchItem";
+    private static final String HAS_ITEM_TARGET_INDEX_TAG = "PalHasItemTargetIndex";
+    private static final String HAS_ITEM_ACTION_KEY_TAG = "PalHasItemActionKey";
+    private static final String HAS_ITEM_MATCH_ITEM_TAG = "PalHasItemMatchItem";
     private static final String COMMANDER_UUID_TAG = "CommanderUUID";
     private static final String FOLLOW_COMMANDER_TAG = "FollowCommander";
+    private static final String PROGRAM_START_POS_TAG = "ProgramStartPos";
+
+    private static final GameProfile PAL_FAKE_PLAYER_PROFILE =
+            new GameProfile(UUID.fromString("f27f13ee-1d56-4f31-a322-a4c32701793f"), "create_pp_pal");
 
 
     /**
@@ -884,6 +896,11 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             return;
         }
 
+        if ("has_item".equals(action)) {
+            executeHasItem(data);
+            return;
+        }
+
         executeMoveForward(data, schedule);
     }
 
@@ -969,6 +986,70 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
         setPos(next.getX() + 0.5D, getY() + stepHeight, next.getZ() + 0.5D);
         return true;
+    }
+
+    private void executeHasItem(CompoundTag data) {
+        if (!data.contains(HAS_ITEM_MATCH_ITEM_TAG))
+            return;
+
+        ItemStack configured = ItemStack.parseOptional(level().registryAccess(), data.getCompound(HAS_ITEM_MATCH_ITEM_TAG));
+        if (configured.isEmpty())
+            return;
+
+        int inventorySlot = findMatchingInventorySlot(configured);
+        if (inventorySlot < 0)
+            return;
+
+        ItemStack stackToUse = inventory.getItem(inventorySlot);
+        if (stackToUse.isEmpty())
+            return;
+
+        if ("use".equals(data.getString(HAS_ITEM_ACTION_KEY_TAG))) {
+            int targetIndex = data.getInt(HAS_ITEM_TARGET_INDEX_TAG);
+            useInventoryItemOnTarget(inventorySlot, stackToUse, targetIndex);
+        }
+    }
+
+    private int findMatchingInventorySlot(ItemStack configured) {
+        FilterItemStack configuredFilter = FilterItemStack.of(configured.copy());
+        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
+            ItemStack candidate = inventory.getItem(slot);
+            if (candidate.isEmpty())
+                continue;
+            if (configuredFilter.test(level(), candidate))
+                return slot;
+        }
+        return -1;
+    }
+
+    private void useInventoryItemOnTarget(int inventorySlot, ItemStack stackToUse, int targetIndex) {
+        if (!(level() instanceof ServerLevel serverLevel))
+            return;
+
+        BlockPos targetPos = getCheckTargetPosition(targetIndex);
+        Direction face = switch (targetIndex) {
+            case 1 -> Direction.DOWN;
+            case 2 -> getDirection().getOpposite();
+            default -> Direction.UP;
+        };
+
+        FakePlayer fakePlayer = FakePlayerFactory.get(serverLevel, PAL_FAKE_PLAYER_PROFILE);
+        fakePlayer.moveTo(getX(), getY(), getZ(), getYRot(), getXRot());
+
+        ItemStack handStack = stackToUse.copy();
+        fakePlayer.setItemInHand(InteractionHand.MAIN_HAND, handStack);
+
+        Vec3 hitCenter = Vec3.atCenterOf(targetPos);
+        BlockHitResult hitResult = new BlockHitResult(hitCenter, face, targetPos, false);
+        UseOnContext context = new UseOnContext(fakePlayer, InteractionHand.MAIN_HAND, hitResult);
+
+        InteractionResult result = handStack.useOn(context);
+        if (result == InteractionResult.PASS)
+            handStack.use(serverLevel, fakePlayer, InteractionHand.MAIN_HAND);
+
+        ItemStack updated = fakePlayer.getItemInHand(InteractionHand.MAIN_HAND);
+        inventory.setItem(inventorySlot, updated.copy());
+        setHeldTool(updated);
     }
 
     /**

@@ -88,6 +88,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private int editingMoveDistanceIndex = 0;
     private boolean editingMoveStepCheckLink = false;
     private int editingCheckBlockMatchActionIndex = 0;
+    private int editingHasItemTargetIndex = 0;
+    private int editingHasItemActionIndex = 0;
     private boolean scheduleSavedToServer = false;
     private boolean closeAfterSave = false;
     private int closeAfterSaveTicks = 0;
@@ -97,7 +99,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             "jump",
             "wait",
             "check_block",
-            "if_has_item",
+            "has_item",
             "harvest",
             "place",
             "go_to_storage"
@@ -108,7 +110,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             Component.literal("Jump"),
             Component.literal("Wait"),
             Component.literal("Check Block"),
-            Component.literal("If Has Item"),
+            Component.literal("Has Item"),
             Component.literal("Harvest"),
             Component.literal("Place"),
             Component.literal("Go to Storage")
@@ -128,6 +130,16 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private static final List<Component> CHECK_BLOCK_MATCH_ACTION_OPTIONS = List.of(
             Component.literal("Harvest"),
             Component.literal("Chop")
+    );
+
+    private static final List<String> HAS_ITEM_ACTION_KEYS = List.of(
+            "use",
+            "placeholder"
+    );
+
+    private static final List<Component> HAS_ITEM_ACTION_OPTIONS = List.of(
+            Component.literal("Use"),
+            Component.literal("Placeholder")
     );
 
     private static final List<Component> MOVE_DIRECTION_OPTIONS = List.of(
@@ -161,6 +173,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private static final String MOVE_STEP_CHECK_LINK_TAG = "PalMoveStepCheckLink";
     private static final String CHECK_BLOCK_MATCH_ACTION_KEY_TAG = "PalCheckBlockMatchActionKey";
     private static final String CHECK_BLOCK_MATCH_ITEM_TAG = "PalCheckBlockMatchItem";
+    private static final String HAS_ITEM_TARGET_INDEX_TAG = "PalHasItemTargetIndex";
+    private static final String HAS_ITEM_ACTION_KEY_TAG = "PalHasItemActionKey";
+    private static final String HAS_ITEM_MATCH_ITEM_TAG = "PalHasItemMatchItem";
 
 
     /**
@@ -365,6 +380,34 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return CHECK_BLOCK_MATCH_ACTION_KEYS.get(clamped);
     }
 
+    private int getHasItemTargetIndex(ScheduleInstruction instruction) {
+        CompoundTag data = instruction.getData();
+        int stored = data.contains(HAS_ITEM_TARGET_INDEX_TAG) ? data.getInt(HAS_ITEM_TARGET_INDEX_TAG) : 0;
+        return Mth.clamp(stored, 0, CHECK_BLOCK_TARGET_OPTIONS.size() - 1);
+    }
+
+    private int getHasItemActionIndex(ScheduleInstruction instruction) {
+        CompoundTag data = instruction.getData();
+        if (data.contains(HAS_ITEM_ACTION_KEY_TAG)) {
+            int byKey = HAS_ITEM_ACTION_KEYS.indexOf(data.getString(HAS_ITEM_ACTION_KEY_TAG));
+            if (byKey >= 0)
+                return Mth.clamp(byKey, 0, HAS_ITEM_ACTION_OPTIONS.size() - 1);
+        }
+        return 0;
+    }
+
+    private ItemStack getHasItemMatchItem(ScheduleInstruction instruction) {
+        CompoundTag data = instruction.getData();
+        if (!data.contains(HAS_ITEM_MATCH_ITEM_TAG))
+            return ItemStack.EMPTY;
+        return ItemStack.parseOptional(menu.player.registryAccess(), data.getCompound(HAS_ITEM_MATCH_ITEM_TAG));
+    }
+
+    private String getHasItemActionKeyForIndex(int index) {
+        int clamped = Mth.clamp(index, 0, HAS_ITEM_ACTION_KEYS.size() - 1);
+        return HAS_ITEM_ACTION_KEYS.get(clamped);
+    }
+
 
     /**
      * Returns data needed by getMoveDirectionIndex.
@@ -417,6 +460,11 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             return;
         }
 
+        if (isHasItemAction(editingActionIndex)) {
+            configureHasItemInputs();
+            return;
+        }
+
         configureInactiveInputs();
     }
 
@@ -440,6 +488,35 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 .writingTo(tertiaryScrollLabel)
                 .calling(index -> editingCheckBlockMatchActionIndex = index)
                 .setState(editingCheckBlockMatchActionIndex);
+        tertiaryBackgroundInput.active = true;
+        tertiaryBackgroundInput.visible = true;
+
+        moveLinkToggleButton.active = false;
+        moveLinkToggleButton.visible = false;
+
+        menu.targetSlotsActive = 1;
+    }
+
+    /**
+     * Applies selector setup for the has-item action.
+     */
+    private void configureHasItemInputs() {
+        secondaryBackgroundInput.forOptions(CHECK_BLOCK_TARGET_OPTIONS)
+                .titled(Component.literal("Target"))
+                .writingTo(secondaryScrollLabel)
+                .calling(index -> editingHasItemTargetIndex = index)
+                .setState(editingHasItemTargetIndex);
+        secondaryBackgroundInput.active = true;
+        secondaryBackgroundInput.visible = true;
+
+        moveDistanceInput.active = false;
+        moveDistanceInput.visible = false;
+
+        tertiaryBackgroundInput.forOptions(HAS_ITEM_ACTION_OPTIONS)
+                .titled(Component.literal("Action"))
+                .writingTo(tertiaryScrollLabel)
+                .calling(index -> editingHasItemActionIndex = index)
+                .setState(editingHasItemActionIndex);
         tertiaryBackgroundInput.active = true;
         tertiaryBackgroundInput.visible = true;
 
@@ -558,6 +635,14 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return "move".equals(getActionKeyForIndex(index));
     }
 
+    private boolean isHasItemAction(int index) {
+        return "has_item".equals(getActionKeyForIndex(index));
+    }
+
+    private boolean isItemSlotAction(int index) {
+        return isCheckBlockAction(index) || isHasItemAction(index);
+    }
+
     /**
      * Returns data needed by getActionLabel.
      */
@@ -576,6 +661,12 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             Component direction = MOVE_DIRECTION_OPTIONS.get(getMoveDirectionIndex(instruction));
             String linked = getMoveStepCheckLinkEnabled(instruction) ? " + LinkCheck" : "";
             return Component.literal(action.getString() + " " + distance + " " + direction.getString() + linked);
+        }
+
+        if (isHasItemAction(actionIndex)) {
+            Component target = CHECK_BLOCK_TARGET_OPTIONS.get(getHasItemTargetIndex(instruction));
+            Component actionOption = HAS_ITEM_ACTION_OPTIONS.get(getHasItemActionIndex(instruction));
+            return Component.literal(action.getString() + " " + target.getString() + " -> " + actionOption.getString());
         }
 
         return action;
@@ -618,7 +709,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         removeWidget(editorDelete);
 
         IScheduleInput editing = editingCondition == null ? editingDestination : editingCondition;
-        int activeTargetSlots = isCheckBlockAction(editingActionIndex) ? 1 : editing.slotsTargeted();
+        int activeTargetSlots = isItemSlotAction(editingActionIndex) ? 1 : editing.slotsTargeted();
         for (int i = 0; i < activeTargetSlots; i++)
             editing.setItem(i, menu.ghostInventory.getStackInSlot(i));
 
@@ -642,6 +733,20 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 destinationData.remove(CHECK_BLOCK_MATCH_ITEM_TAG);
                 checkBlockTargetSelection.remove(editingDestination);
                 checkBlockMatchActionSelection.remove(editingDestination);
+            }
+
+            if (isHasItemAction(editingActionIndex)) {
+                destinationData.putInt(HAS_ITEM_TARGET_INDEX_TAG, editingHasItemTargetIndex);
+                destinationData.putString(HAS_ITEM_ACTION_KEY_TAG, getHasItemActionKeyForIndex(editingHasItemActionIndex));
+                ItemStack hasItemStack = menu.ghostInventory.getStackInSlot(0);
+                if (hasItemStack.isEmpty())
+                    destinationData.remove(HAS_ITEM_MATCH_ITEM_TAG);
+                else
+                    destinationData.put(HAS_ITEM_MATCH_ITEM_TAG, hasItemStack.saveOptional(menu.player.registryAccess()));
+            } else {
+                destinationData.remove(HAS_ITEM_TARGET_INDEX_TAG);
+                destinationData.remove(HAS_ITEM_ACTION_KEY_TAG);
+                destinationData.remove(HAS_ITEM_MATCH_ITEM_TAG);
             }
 
             if (isMoveAction(editingActionIndex)) {
@@ -683,7 +788,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
      * Manages editor UI state in updateEditorSubwidgets.
      */
     protected void updateEditorSubwidgets(IScheduleInput field) {
-        menu.targetSlotsActive = isCheckBlockAction(editingActionIndex) ? 1 : field.slotsTargeted();
+        menu.targetSlotsActive = isItemSlotAction(editingActionIndex) ? 1 : field.slotsTargeted();
         refreshEditorBackgrounds();
     }
 
@@ -703,14 +808,19 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         if (isCheckBlockAction(editingActionIndex)) {
             editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 58, 18), "check_block_target_selector_background"));
             editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 140, topPos + 87, 58, 18), "check_block_match_selector_background"));
+            return;
+        }
+
+        if (isHasItemAction(editingActionIndex)) {
+            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 58, 18), "check_block_target_selector_background"));
+            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 140, topPos + 87, 58, 18), "check_block_match_selector_background"));
         }
     }
 
-
+    @Override
     /**
      * Handles the containerTick lifecycle step for this screen/entity.
      */
-    @Override
     protected void containerTick() {
         super.containerTick();
 
@@ -728,6 +838,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         schedule.savedProgress =
                 schedule.entries.isEmpty() ? 0 : Mth.clamp(schedule.savedProgress, 0, schedule.entries.size() - 1);
     }
+
 
     /**
      * Handles the render lifecycle step for this screen/entity.
@@ -1024,6 +1135,13 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                     if (!matchItem.isEmpty())
                         entry.instruction.getData().put(CHECK_BLOCK_MATCH_ITEM_TAG, matchItem.saveOptional(menu.player.registryAccess()));
                 }
+                if (isHasItemAction(editingActionIndex)) {
+                    entry.instruction.getData().putInt(HAS_ITEM_TARGET_INDEX_TAG, editingHasItemTargetIndex);
+                    entry.instruction.getData().putString(HAS_ITEM_ACTION_KEY_TAG, getHasItemActionKeyForIndex(editingHasItemActionIndex));
+                    ItemStack hasItemStack = menu.ghostInventory.getStackInSlot(0);
+                    if (!hasItemStack.isEmpty())
+                        entry.instruction.getData().put(HAS_ITEM_MATCH_ITEM_TAG, hasItemStack.saveOptional(menu.player.registryAccess()));
+                }
                 if (isMoveAction(editingActionIndex)) {
                     entry.instruction.getData().putInt(MOVE_DIRECTION_INDEX_TAG, editingMoveDirectionIndex);
                     entry.instruction.getData().putInt(MOVE_DISTANCE_INDEX_TAG, editingMoveDistanceIndex);
@@ -1142,7 +1260,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
         IScheduleInput rendered = editingCondition == null ? editingDestination : editingCondition;
 
-        int renderedTargetSlots = isCheckBlockAction(editingActionIndex) ? 1 : rendered.slotsTargeted();
+        int renderedTargetSlots = isItemSlotAction(editingActionIndex) ? 1 : rendered.slotsTargeted();
         for (int i = 0; i < Math.max(1, renderedTargetSlots); i++) {
             List<Component> secondLineTooltip = rendered.getSecondLineTooltip(i);
             if (secondLineTooltip == null)
