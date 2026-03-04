@@ -1160,9 +1160,6 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             return false;
 
         FilterItemStack configuredFilter = FilterItemStack.of(configured.copy());
-        if (configuredFilter.isFilterItem())
-            return configuredFilter.test(level(), target);
-
-        return target.getItem() == configured.getItem();
+        return configuredFilter.test(level(), target);
     }
 }
