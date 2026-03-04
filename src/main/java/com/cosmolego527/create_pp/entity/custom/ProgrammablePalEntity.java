@@ -87,6 +87,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private CompoundTag queuedStepCheckInstructionData = null;
     private boolean skipNextStandaloneCheckInstruction = false;
     private ItemStack lastInstructionTapeSnapshot = ItemStack.EMPTY;
+    private CompoundTag activeRunTapeProgramTag = null;
+    private int activeRunTapeInstructionPointer = 0;
     private int runTapeDepth = 0;
 
     private final ArrayDeque<BlockPos> pendingChopTargets = new ArrayDeque<>();
@@ -241,6 +243,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         queuedMoveDirectionIndex = 0;
         queuedStepCheckInstructionData = null;
         skipNextStandaloneCheckInstruction = false;
+        activeRunTapeProgramTag = null;
+        activeRunTapeInstructionPointer = 0;
         runTapeDepth = 0;
         clearChopTask();
     }
@@ -712,6 +716,14 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             return;
         }
 
+        if (activeRunTapeProgramTag != null) {
+            boolean finishedSubTape = executeActiveRunTapeStep();
+            if (finishedSubTape)
+                advanceMainInstructionPointer();
+            instructionCooldown = 20;
+            return;
+        }
+
         ItemStack instructions = getInstructionTape();
         CompoundTag programTag = instructions.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
 
@@ -726,15 +738,15 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         CompoundTag entryData = entry.instruction.getData();
         String actionKey = entryData.getString(ACTION_KEY_TAG);
 
+        boolean advancePointer = true;
         if (skipNextStandaloneCheckInstruction && "check_block".equals(actionKey)) {
             skipNextStandaloneCheckInstruction = false;
         } else {
-            executeInstruction(entry.instruction, schedule);
+            advancePointer = executeInstruction(entry.instruction, schedule);
         }
 
-        instructionPointer++;
-        if (instructionPointer >= schedule.entries.size())
-            instructionPointer = 0;
+        if (advancePointer)
+            advanceMainInstructionPointer();
 
         instructionCooldown = 20;
     }
@@ -887,30 +899,57 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         chopCooldown = 0;
     }
 
+    private void advanceMainInstructionPointer() {
+        ItemStack instructions = getInstructionTape();
+        CompoundTag programTag = instructions.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
+        if (programTag == null || programTag.isEmpty()) {
+            instructionPointer = 0;
+            return;
+        }
+
+        Schedule schedule = Schedule.fromTag(level().registryAccess(), programTag);
+        if (schedule.entries.isEmpty()) {
+            instructionPointer = 0;
+            return;
+        }
+
+        instructionPointer++;
+        if (instructionPointer >= schedule.entries.size())
+            instructionPointer = 0;
+    }
+
     /**
      * Executes runtime logic for executeInstruction.
      */
-    private void executeInstruction(ScheduleInstruction instruction, Schedule schedule) {
+    private boolean executeInstruction(ScheduleInstruction instruction, Schedule schedule) {
         CompoundTag data = instruction.getData();
         String action = data.getString(ACTION_KEY_TAG);
 
 
         if ("check_block".equals(action)) {
             executeCheckBlock(data);
-            return;
+            return true;
         }
 
         if ("has_item".equals(action)) {
             executeHasItem(data);
-            return;
+            return true;
         }
 
         if ("run_tape".equals(action)) {
-            executeRunTape(data);
-            return;
+            if (runTapeDepth > 0) {
+                executeRunTapeImmediate(data);
+                return true;
+            }
+
+            startRunTape(data);
+            if (activeRunTapeProgramTag == null)
+                return true;
+            return executeActiveRunTapeStep();
         }
 
         executeMoveForward(data, schedule);
+        return true;
     }
 
     /**
@@ -997,7 +1036,69 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         return true;
     }
 
-    private void executeRunTape(CompoundTag data) {
+    private void startRunTape(CompoundTag data) {
+        if (!data.contains(RUN_TAPE_ITEM_TAG)) {
+            activeRunTapeProgramTag = null;
+            return;
+        }
+
+        ItemStack nestedTape = ItemStack.parseOptional(level().registryAccess(), data.getCompound(RUN_TAPE_ITEM_TAG));
+        if (nestedTape.isEmpty() || nestedTape.getItem() != ModItems.PROGRAMMABLE_TAPE.get()) {
+            activeRunTapeProgramTag = null;
+            return;
+        }
+
+        CompoundTag nestedProgramTag = nestedTape.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
+        if (nestedProgramTag == null || nestedProgramTag.isEmpty()) {
+            activeRunTapeProgramTag = null;
+            return;
+        }
+
+        Schedule nestedSchedule = Schedule.fromTag(level().registryAccess(), nestedProgramTag);
+        if (nestedSchedule.entries.isEmpty()) {
+            activeRunTapeProgramTag = null;
+            return;
+        }
+
+        activeRunTapeProgramTag = nestedProgramTag.copy();
+        activeRunTapeInstructionPointer = 0;
+    }
+
+    private boolean executeActiveRunTapeStep() {
+        if (activeRunTapeProgramTag == null)
+            return true;
+
+        Schedule nestedSchedule = Schedule.fromTag(level().registryAccess(), activeRunTapeProgramTag);
+        if (nestedSchedule.entries.isEmpty()) {
+            activeRunTapeProgramTag = null;
+            return true;
+        }
+
+        if (activeRunTapeInstructionPointer >= nestedSchedule.entries.size()) {
+            activeRunTapeProgramTag = null;
+            return true;
+        }
+
+        ScheduleInstruction nestedInstruction = nestedSchedule.entries.get(activeRunTapeInstructionPointer).instruction;
+        activeRunTapeInstructionPointer++;
+
+        runTapeDepth++;
+        try {
+            executeInstruction(nestedInstruction, nestedSchedule);
+        } finally {
+            runTapeDepth--;
+        }
+
+        if (activeRunTapeInstructionPointer >= nestedSchedule.entries.size()) {
+            activeRunTapeProgramTag = null;
+            activeRunTapeInstructionPointer = 0;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void executeRunTapeImmediate(CompoundTag data) {
         if (runTapeDepth > 4 || !data.contains(RUN_TAPE_ITEM_TAG))
             return;
 
