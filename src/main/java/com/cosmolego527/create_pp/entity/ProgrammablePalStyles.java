@@ -3,7 +3,6 @@ package com.cosmolego527.create_pp.entity;
 import com.cosmolego527.create_pp.CreatePP;
 import com.google.common.collect.ImmutableList;
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.ApiStatus;
 
 import java.util.List;
 import java.util.Locale;

@@ -1,12 +1,12 @@
-package com.cosmolego527.create_pp.item.logistics.functions;
+package com.cosmolego527.create_pp.item.tapes;
 
 import com.cosmolego527.create_pp.ModMenuTypes;
 import com.cosmolego527.create_pp.component.ModDataComponentTypes;
 import com.cosmolego527.create_pp.item.ModItems;
-import com.cosmolego527.create_pp.item.logistics.functions.voidfunc.VoidFunctionMenu;
+import com.cosmolego527.create_pp.item.logistics.functions.FunctionInstruction;
 import com.simibubi.create.AllDataComponents;
-import com.simibubi.create.content.logistics.filter.*;
 import com.simibubi.create.foundation.item.ItemHelper;
+import com.simibubi.create.foundation.recipe.ItemCopyingRecipe.SupportsItemCopying;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -17,7 +17,6 @@ import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import com.simibubi.create.foundation.recipe.ItemCopyingRecipe.SupportsItemCopying;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
@@ -26,23 +25,31 @@ import net.neoforged.neoforge.items.ItemStackHandler;
 
 import javax.annotation.Nonnull;
 
-public class FunctionTapeItem extends Item implements MenuProvider, SupportsItemCopying {
+public class TapeProgramType extends Item implements MenuProvider, SupportsItemCopying {
 
     public FunctionInstruction[] functionInstructions;
 
-    private FunctionType type;
+    private TapeType type;
 
-    public enum FunctionType {
-        BOOL, INT, STRING, VOID, FLOAT;
+    public enum TapeType {
+        TAPE,
+        FIGHT;
+//        BOOL,
+//        INT,
+//        STRING,
+//        VOID,
+//        FLOAT;
     }
 
-    public static FunctionTapeItem boolFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.BOOL, properties);}
-    public static FunctionTapeItem intFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.INT, properties);}
-    public static FunctionTapeItem stringFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.STRING, properties);}
-    public static FunctionTapeItem voidFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.VOID, properties);}
-    public static FunctionTapeItem floatFuncItem(Properties properties) {return new FunctionTapeItem(FunctionType.FLOAT, properties);}
+    public static TapeProgramType programmableTapeItem(Properties properties) {return new TapeProgramType(TapeType.TAPE, properties);}
+    public static TapeProgramType fightTapeItem(Properties properties) {return new TapeProgramType(TapeType.FIGHT, properties);}
+//    public static TapeProgramType boolFuncItem(Properties properties) {return new TapeProgramType(TapeType.BOOL, properties);}
+//    public static TapeProgramType intFuncItem(Properties properties) {return new TapeProgramType(TapeType.INT, properties);}
+//    public static TapeProgramType stringFuncItem(Properties properties) {return new TapeProgramType(TapeType.STRING, properties);}
+//    public static TapeProgramType voidFuncItem(Properties properties) {return new TapeProgramType(TapeType.VOID, properties);}
+//    public static TapeProgramType floatFuncItem(Properties properties) {return new TapeProgramType(TapeType.FLOAT, properties);}
 
-    public FunctionTapeItem(FunctionType type, Properties properties) {
+    public TapeProgramType(TapeType type, Properties properties) {
         super(properties);
         this.type = type;
     }
@@ -56,6 +63,8 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
     @Override
     public InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
         ItemStack heldItem = player.getItemInHand(hand);
+        if (type != TapeType.TAPE)
+            return InteractionResultHolder.pass(heldItem);
 
         if (!player.isShiftKeyDown() && hand == InteractionHand.MAIN_HAND) {
             if (!world.isClientSide && player instanceof ServerPlayer)
@@ -70,15 +79,19 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
     @Override
     public AbstractContainerMenu createMenu(int id, Inventory inv, Player player) {
         //ItemStack heldItem = player.getMainHandItem();
-        //if (type == FunctionType.BOOL)
+        //if (type == TapeType.BOOL)
         //    return AttributeFilterMenu.create(id, inv, heldItem);
-        //if (type == FunctionType.INT)
+        //if (type == TapeType.INT)
         //    return AttributeFilterMenu.create(id, inv, heldItem);
-        //if (type == FunctionType.STRING)
+        //if (type == TapeType.STRING)
         //    return PackageFilterMenu.create(id, inv, heldItem);
-        //if (type == FunctionType.VOID)
+        //if (type == TapeType.VOID)
         //    return new VoidFunctionMenu(ModMenuTypes.VOID_FUNCTION_MENU.get(), id, inv, heldItem);
-        return null;
+        if (type != TapeType.TAPE)
+            return null;
+        ItemStack heldItem = player.getMainHandItem();
+        return new TapeProgramMenu(ModMenuTypes.TAPE_PROGRAM_MENU.get(), id, inv, heldItem);
+       // return null;
     }
 
     @Override
@@ -88,7 +101,7 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
 
     public static ItemStackHandler getFilterItems(ItemStack stack) {
         ItemStackHandler newInv = new ItemStackHandler(18);
-        if (ModItems.VOID_FUNCTION_TAPE.get() != stack.getItem())
+        if (ModItems.PROGRAMMABLE_TAPE.get() != stack.getItem())
             throw new IllegalArgumentException("Cannot get filter items from non-filter: " + stack);
         if (!stack.has(AllDataComponents.FILTER_ITEMS))
             return newInv;
@@ -104,10 +117,13 @@ public class FunctionTapeItem extends Item implements MenuProvider, SupportsItem
     @Override
     public DataComponentType<?> getComponentType() {
         return switch (type) {
-            case BOOL -> AllDataComponents.FILTER_ITEMS;
-            case INT -> AllDataComponents.ATTRIBUTE_FILTER_MATCHED_ATTRIBUTES;
-            case STRING, FLOAT -> AllDataComponents.PACKAGE_ADDRESS;
-            case VOID -> ModDataComponentTypes.VOID_FUNCTION_DATA;
+            case TAPE -> null;
+            case FIGHT -> null;
+//            case BOOL -> AllDataComponents.FILTER_ITEMS;
+//            case INT -> AllDataComponents.ATTRIBUTE_FILTER_MATCHED_ATTRIBUTES;
+//            case STRING, FLOAT -> AllDataComponents.PACKAGE_ADDRESS;
+//            case VOID -> ModDataComponentTypes.VOID_FUNCTION_DATA;
+
 
         };
     }

@@ -1,4 +1,4 @@
-package com.cosmolego527.create_pp.item.logistics.functions.voidfunc;
+package com.cosmolego527.create_pp.item.tapes;
 
 import com.simibubi.create.foundation.gui.menu.GhostItemMenu;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -13,87 +13,94 @@ import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import net.neoforged.neoforge.items.SlotItemHandler;
 
-public class VoidFunctionMenu extends GhostItemMenu<ItemStack> {
+public class TapeProgramMenu extends GhostItemMenu<ItemStack> {
+
     public boolean slotsActive = true;
     public int targetSlotsActive = 1;
+
     static final int slots = 2;
 
-    public VoidFunctionMenu(MenuType<?> type, int id, Inventory inv, RegistryFriendlyByteBuf extraData) {
+    public TapeProgramMenu(MenuType<?> type, int id, Inventory inv, RegistryFriendlyByteBuf extraData) {
         super(type, id, inv, extraData);
     }
 
-    public VoidFunctionMenu(MenuType<?> type, int id, Inventory inv, ItemStack contentHolder) {
+    public TapeProgramMenu(MenuType<?> type, int id, Inventory inv, ItemStack contentHolder) {
         super(type, id, inv, contentHolder);
     }
 
+    @Override
     protected ItemStackHandler createGhostInventory() {
-        return new ItemStackHandler(2);
+        return new ItemStackHandler(slots);
     }
 
+    @Override
     public void clicked(int slotId, int dragType, ClickType clickTypeIn, Player player) {
-        if (slotId != this.playerInventory.selected || clickTypeIn == ClickType.THROW) {
+        if (slotId != playerInventory.selected || clickTypeIn == ClickType.THROW)
             super.clicked(slotId, dragType, clickTypeIn, player);
-        }
-
     }
 
+    @Override
     protected boolean allowRepeats() {
         return true;
     }
 
+    @Override
     protected ItemStack createOnClient(RegistryFriendlyByteBuf extraData) {
-        return (ItemStack)ItemStack.STREAM_CODEC.decode(extraData);
+        return ItemStack.STREAM_CODEC.decode(extraData);
     }
 
+    @Override
     protected void addSlots() {
-        this.addPlayerSlots(46, 140);
-
-        for(int i = 0; i < 2; ++i) {
-            this.addSlot(new VoidFunctionMenu.InactiveItemHandlerSlot(this.ghostInventory, i, i, 54 + 20 * i, 88));
-        }
-
+        addPlayerSlots(46, 140);
+        for (int i = 0; i < slots; i++)
+            addSlot(new InactiveItemHandlerSlot(ghostInventory, i, i, 54 + 20 * i, 88));
     }
 
+    @Override
     protected void addPlayerSlots(int x, int y) {
-        for(int hotbarSlot = 0; hotbarSlot < 9; ++hotbarSlot) {
-            this.addSlot(new VoidFunctionMenu.InactiveSlot(this.playerInventory, hotbarSlot, x + hotbarSlot * 18, y + 58));
-        }
-
-        for(int row = 0; row < 3; ++row) {
-            for(int col = 0; col < 9; ++col) {
-                this.addSlot(new VoidFunctionMenu.InactiveSlot(this.playerInventory, col + row * 9 + 9, x + col * 18, y + row * 18));
-            }
-        }
-
+        for (int hotbarSlot = 0; hotbarSlot < 9; ++hotbarSlot)
+            this.addSlot(new InactiveSlot(playerInventory, hotbarSlot, x + hotbarSlot * 18, y + 58));
+        for (int row = 0; row < 3; ++row)
+            for (int col = 0; col < 9; ++col)
+                this.addSlot(new InactiveSlot(playerInventory, col + row * 9 + 9, x + col * 18, y + row * 18));
     }
 
-    protected void saveData(ItemStack contentHolder) {
-    }
+    @Override
+    protected void saveData(ItemStack contentHolder) {}
 
+    @Override
     public boolean stillValid(Player player) {
-        return this.playerInventory.getSelected() == this.contentHolder;
+        return playerInventory.getSelected() == contentHolder;
     }
 
     class InactiveSlot extends Slot {
+
         public InactiveSlot(Container pContainer, int pIndex, int pX, int pY) {
             super(pContainer, pIndex, pX, pY);
         }
 
+        @Override
         public boolean isActive() {
-            return VoidFunctionMenu.this.slotsActive;
+            return slotsActive;
         }
+
     }
 
     class InactiveItemHandlerSlot extends SlotItemHandler {
+
         private int targetIndex;
 
-        public InactiveItemHandlerSlot(IItemHandler itemHandler, int targetIndex, int index, int xPosition, int yPosition) {
+        public InactiveItemHandlerSlot(IItemHandler itemHandler, int targetIndex, int index, int xPosition,
+                                       int yPosition) {
             super(itemHandler, index, xPosition, yPosition);
             this.targetIndex = targetIndex;
         }
 
+        @Override
         public boolean isActive() {
-            return VoidFunctionMenu.this.slotsActive && this.targetIndex < VoidFunctionMenu.this.targetSlotsActive;
+            return slotsActive && targetIndex < targetSlotsActive;
         }
+
     }
+
 }
