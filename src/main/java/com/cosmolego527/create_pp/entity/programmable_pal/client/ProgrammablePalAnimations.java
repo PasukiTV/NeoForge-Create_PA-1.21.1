@@ -1,11 +1,11 @@
-package com.cosmolego527.create_pp.entity.client;
+package com.cosmolego527.create_pp.entity.programmable_pal.client;
 
 import net.minecraft.client.animation.AnimationChannel;
 import net.minecraft.client.animation.AnimationDefinition;
 import net.minecraft.client.animation.Keyframe;
 import net.minecraft.client.animation.KeyframeAnimations;
 
-public class ProgrammabelPalAnimations {
+public class ProgrammablePalAnimations {
 
     public static AnimationChannel.Interpolation undefined = AnimationChannel.Interpolations.LINEAR;
     public static final AnimationDefinition ANIM_PP_IDLE = AnimationDefinition.Builder.withLength(5f).looping()
@@ -206,3 +206,5 @@ public class ProgrammabelPalAnimations {
                             new Keyframe(1f, KeyframeAnimations.degreeVec(0f, 0f, 0f),
                                     AnimationChannel.Interpolations.LINEAR))).build();
 }
+
+

@@ -2,7 +2,7 @@ package com.cosmolego527.create_pp.network;
 
 import com.cosmolego527.create_pp.CreatePP;
 import com.cosmolego527.create_pp.component.ModDataComponentTypes;
-import com.cosmolego527.create_pp.item.tapes.TapeProgramMenu;
+import com.cosmolego527.create_pp.item.tape_program.TapeProgramMenu;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -48,3 +48,4 @@ public record SaveTapeProgramPacket(CompoundTag scheduleTag, String customName) 
         });
     }
 }
+

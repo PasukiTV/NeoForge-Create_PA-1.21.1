@@ -1,4 +1,4 @@
-package com.cosmolego527.create_pp.item.tapes;
+package com.cosmolego527.create_pp.item.tape_program;
 
 import com.simibubi.create.foundation.gui.menu.GhostItemMenu;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -104,3 +104,4 @@ public class TapeProgramMenu extends GhostItemMenu<ItemStack> {
     }
 
 }
+

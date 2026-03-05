@@ -2,8 +2,8 @@ package com.cosmolego527.create_pp.event;
 
 import com.cosmolego527.create_pp.CreatePP;
 import com.cosmolego527.create_pp.entity.ModEntities;
-import com.cosmolego527.create_pp.entity.client.ProgramablePalModel;
-import com.cosmolego527.create_pp.entity.custom.ProgrammablePalEntity;
+import com.cosmolego527.create_pp.entity.programmable_pal.client.ProgrammablePalModel;
+import com.cosmolego527.create_pp.entity.programmable_pal.ProgrammablePalEntity;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
@@ -14,7 +14,7 @@ public class ModEventBusEvents {
 
     @SubscribeEvent
     public static void registerLayers(EntityRenderersEvent.RegisterLayerDefinitions event) {
-        event.registerLayerDefinition(ProgramablePalModel.LAYER_LOCATION, ProgramablePalModel::createBodyLayer);
+        event.registerLayerDefinition(ProgrammablePalModel.LAYER_LOCATION, ProgrammablePalModel::createBodyLayer);
     }
 
     @SubscribeEvent
@@ -24,3 +24,5 @@ public class ModEventBusEvents {
 
 
 }
+
+

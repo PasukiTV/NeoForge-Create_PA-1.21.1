@@ -1,9 +1,9 @@
-package com.cosmolego527.create_pp.entity.custom;
+package com.cosmolego527.create_pp.entity.programmable_pal;
 
 import com.cosmolego527.create_pp.entity.ModEntities;
-import com.cosmolego527.create_pp.entity.ProgrammablePalVariant;
+import com.cosmolego527.create_pp.entity.programmable_pal.ProgrammablePalVariant;
 import com.cosmolego527.create_pp.component.ModDataComponentTypes;
-import com.cosmolego527.create_pp.entity.menu.ProgrammablePalMenu;
+import com.cosmolego527.create_pp.entity.programmable_pal.menu.ProgrammablePalMenu;
 import com.cosmolego527.create_pp.item.ModItems;
 import com.mojang.authlib.GameProfile;
 import com.simibubi.create.content.logistics.filter.FilterItemStack;
@@ -44,6 +44,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.level.block.CropBlock;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
@@ -73,10 +75,27 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             super.setChanged();
             syncStateFromInventory();
         }
+
+        @Override
+        public void startOpen(Player player) {
+            super.startOpen(player);
+            openMenuCount++;
+        }
+
+        @Override
+        public void stopOpen(Player player) {
+            super.stopOpen(player);
+            openMenuCount = Math.max(0, openMenuCount - 1);
+            if (openMenuCount == 0 && getInstructionTape().isEmpty()) {
+                programStartPos = null;
+                programActiveLastTick = false;
+            }
+        }
     };
 
 
     public int insertionDelay;
+    private int openMenuCount = 0;
 
     public Vec3 clientPosition, vec2 = Vec3.ZERO, vec3 = Vec3.ZERO;
 
@@ -127,9 +146,29 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private static final String HAS_ITEM_MATCH_ITEM_TAG = "PalHasItemMatchItem";
     private static final String RUN_TAPE_ITEM_TAG = "PalRunTapeItem";
     private static final String RUN_TAPE_REPEAT_COUNT_TAG = "PalRunTapeRepeatCount";
+    private static final String INTERACT_TARGET_KEY_TAG = "PalInteractTargetKey";
+    private static final String INTERACT_MODE_KEY_TAG = "PalInteractModeKey";
+    private static final String INTERACT_FILTER_ITEM_TAG = "PalInteractFilterItem";
+    private static final String INTERACT_KEEP_ITEM_TAG = "PalInteractKeepItem";
     private static final String COMMANDER_UUID_TAG = "CommanderUUID";
     private static final String FOLLOW_COMMANDER_TAG = "FollowCommander";
     private static final String PROGRAM_START_POS_TAG = "ProgramStartPos";
+    private static final String INSTRUCTION_POINTER_TAG = "InstructionPointer";
+    private static final String INSTRUCTION_COOLDOWN_TAG = "InstructionCooldown";
+    private static final String QUEUED_MOVE_STEPS_TAG = "QueuedMoveSteps";
+    private static final String QUEUED_MOVE_DIRECTION_INDEX_TAG = "QueuedMoveDirectionIndex";
+    private static final String SKIP_NEXT_STANDALONE_CHECK_TAG = "SkipNextStandaloneCheckInstruction";
+    private static final String QUEUED_STEP_CHECK_DATA_TAG = "QueuedStepCheckInstructionData";
+    private static final String ACTIVE_RUN_TAPE_PROGRAM_TAG = "ActiveRunTapeProgramTag";
+    private static final String ACTIVE_RUN_TAPE_POINTER_TAG = "ActiveRunTapeInstructionPointer";
+    private static final String ACTIVE_RUN_TAPE_REMAINING_TAG = "ActiveRunTapeRemainingRuns";
+    private static final String RUN_TAPE_DEPTH_TAG = "RunTapeDepth";
+    private static final String PENDING_CHOP_TARGETS_TAG = "PendingChopTargets";
+    private static final String QUEUED_CHOP_TARGETS_TAG = "QueuedChopTargets";
+    private static final String PENDING_LEAF_REMOVAL_TAG = "PendingLeafRemoval";
+    private static final String CURRENT_CHOP_TARGET_TAG = "CurrentChopTarget";
+    private static final String CURRENT_CHOP_PROGRESS_TAG = "CurrentChopProgress";
+    private static final String CHOP_COOLDOWN_TAG = "ChopCooldown";
 
     private static final GameProfile PAL_FAKE_PLAYER_PROFILE =
             new GameProfile(UUID.fromString("f27f13ee-1d56-4f31-a322-a4c32701793f"), "create_pp_pal");
@@ -140,6 +179,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
      */
     public ProgrammablePalEntity(EntityType<? extends PathfinderMob> entityTypeIn, Level level) {
         super(entityTypeIn, level);
+        setPersistenceRequired();
         insertionDelay = 30;
     }
     /**
@@ -149,6 +189,11 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         this(ModEntities.PROGRAMMABLE_PAL_ENTITY.get(), worldIn);
         this.setPos(pos);
         this.refreshDimensions();
+    }
+
+    @Override
+    public boolean removeWhenFarAway(double distanceToClosestPlayer) {
+        return false;
     }
 
     @Override
@@ -238,21 +283,94 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         return stack.copyWithCount(1);
     }
 
-    private void resetProgramRuntimeState() {
-        instructionPointer = 0;
-        instructionCooldown = 0;
+    private void clearQueuedMoveState() {
         queuedMoveSteps = 0;
         queuedMoveDirectionIndex = 0;
         queuedStepCheckInstructionData = null;
         skipNextStandaloneCheckInstruction = false;
+    }
+
+    private void clearActiveRunTapeState() {
         activeRunTapeProgramTag = null;
         activeRunTapeInstructionPointer = 0;
+        activeRunTapeRemainingRuns = 0;
+    }
+
+    private void resetProgramRuntimeState() {
+        instructionPointer = 0;
+        instructionCooldown = 0;
+        clearQueuedMoveState();
+        clearActiveRunTapeState();
         runTapeDepth = 0;
         clearChopTask();
     }
 
+    private Schedule getScheduleFromInstructionTape() {
+        ItemStack instructions = getInstructionTape();
+        if (instructions.isEmpty())
+            return null;
+        CompoundTag programTag = instructions.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
+        if (programTag == null || programTag.isEmpty())
+            return null;
+        return Schedule.fromTag(level().registryAccess(), programTag);
+    }
+
+    private void sanitizeLoadedProgramRuntimeState() {
+        Schedule schedule = getScheduleFromInstructionTape();
+        if (schedule == null || schedule.entries.isEmpty()) {
+            resetProgramRuntimeState();
+            return;
+        }
+
+        instructionPointer = Mth.clamp(instructionPointer, 0, schedule.entries.size() - 1);
+        instructionCooldown = Math.max(0, instructionCooldown);
+        queuedMoveSteps = Math.max(0, queuedMoveSteps);
+
+        if (queuedMoveSteps <= 0) {
+            queuedStepCheckInstructionData = null;
+            skipNextStandaloneCheckInstruction = false;
+        }
+
+        if (activeRunTapeProgramTag != null) {
+            Schedule nestedSchedule = Schedule.fromTag(level().registryAccess(), activeRunTapeProgramTag);
+            if (nestedSchedule.entries.isEmpty()) {
+                clearActiveRunTapeState();
+            } else {
+                activeRunTapeInstructionPointer = Mth.clamp(activeRunTapeInstructionPointer, 0,
+                        nestedSchedule.entries.size());
+                activeRunTapeRemainingRuns = Math.max(1, activeRunTapeRemainingRuns);
+            }
+        }
+
+        runTapeDepth = Mth.clamp(runTapeDepth, 0, 4);
+        chopCooldown = Math.max(0, chopCooldown);
+        currentChopProgress = Math.max(0f, currentChopProgress);
+        if (currentChopTarget != null)
+            queuedChopTargets.add(currentChopTarget.immutable());
+    }
+
+    private long[] toLongArray(Iterable<BlockPos> positions, int size) {
+        long[] values = new long[size];
+        int index = 0;
+        for (BlockPos pos : positions)
+            values[index++] = pos.asLong();
+        return values;
+    }
+
+    private void loadQueuedPositions(long[] packedPositions, ArrayDeque<BlockPos> outQueue) {
+        outQueue.clear();
+        for (long packed : packedPositions)
+            outQueue.addLast(BlockPos.of(packed).immutable());
+    }
+
+    private void loadUniquePositions(long[] packedPositions, Set<BlockPos> outSet) {
+        outSet.clear();
+        for (long packed : packedPositions)
+            outSet.add(BlockPos.of(packed).immutable());
+    }
+
     private void captureProgramStartIfNeeded() {
-        if (!programActiveLastTick)
+        if (programStartPos == null)
             programStartPos = blockPosition();
         programActiveLastTick = true;
     }
@@ -274,7 +392,22 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         ItemStack tape = getInstructionTape();
         ItemStack normalizedTape = normalizeTapeSnapshot(tape);
         if (!ItemStack.isSameItemSameComponents(lastInstructionTapeSnapshot, normalizedTape)) {
+            boolean wasEmpty = lastInstructionTapeSnapshot.isEmpty();
+            boolean nowEmpty = normalizedTape.isEmpty();
+
             resetProgramRuntimeState();
+
+            if (nowEmpty) {
+                if (openMenuCount == 0) {
+                    programStartPos = null;
+                    programActiveLastTick = false;
+                }
+            } else if (wasEmpty) {
+                // Tape was reinserted after being removed: start a fresh anchor even while GUI is open.
+                programStartPos = blockPosition();
+                programActiveLastTick = false;
+            }
+
             lastInstructionTapeSnapshot = normalizedTape;
         }
 
@@ -531,6 +664,75 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         this.entityData.set(DOME_COLOR, style.getId() & 255);
     }
 
+    private void saveProgramRuntimeState(CompoundTag compound) {
+        compound.putInt(INSTRUCTION_POINTER_TAG, instructionPointer);
+        compound.putInt(INSTRUCTION_COOLDOWN_TAG, instructionCooldown);
+        compound.putInt(QUEUED_MOVE_STEPS_TAG, queuedMoveSteps);
+        compound.putInt(QUEUED_MOVE_DIRECTION_INDEX_TAG, queuedMoveDirectionIndex);
+        compound.putBoolean(SKIP_NEXT_STANDALONE_CHECK_TAG, skipNextStandaloneCheckInstruction);
+        if (queuedStepCheckInstructionData != null)
+            compound.put(QUEUED_STEP_CHECK_DATA_TAG, queuedStepCheckInstructionData.copy());
+        if (activeRunTapeProgramTag != null)
+            compound.put(ACTIVE_RUN_TAPE_PROGRAM_TAG, activeRunTapeProgramTag.copy());
+        compound.putInt(ACTIVE_RUN_TAPE_POINTER_TAG, activeRunTapeInstructionPointer);
+        compound.putInt(ACTIVE_RUN_TAPE_REMAINING_TAG, activeRunTapeRemainingRuns);
+        compound.putInt(RUN_TAPE_DEPTH_TAG, runTapeDepth);
+    }
+
+    private void loadProgramRuntimeState(CompoundTag compound) {
+        instructionPointer = compound.getInt(INSTRUCTION_POINTER_TAG);
+        instructionCooldown = compound.getInt(INSTRUCTION_COOLDOWN_TAG);
+        queuedMoveSteps = compound.getInt(QUEUED_MOVE_STEPS_TAG);
+        queuedMoveDirectionIndex = compound.getInt(QUEUED_MOVE_DIRECTION_INDEX_TAG);
+        skipNextStandaloneCheckInstruction = compound.getBoolean(SKIP_NEXT_STANDALONE_CHECK_TAG);
+        queuedStepCheckInstructionData = compound.contains(QUEUED_STEP_CHECK_DATA_TAG)
+                ? compound.getCompound(QUEUED_STEP_CHECK_DATA_TAG).copy()
+                : null;
+        activeRunTapeProgramTag = compound.contains(ACTIVE_RUN_TAPE_PROGRAM_TAG)
+                ? compound.getCompound(ACTIVE_RUN_TAPE_PROGRAM_TAG).copy()
+                : null;
+        activeRunTapeInstructionPointer = compound.getInt(ACTIVE_RUN_TAPE_POINTER_TAG);
+        activeRunTapeRemainingRuns = compound.getInt(ACTIVE_RUN_TAPE_REMAINING_TAG);
+        runTapeDepth = compound.getInt(RUN_TAPE_DEPTH_TAG);
+    }
+
+    private void saveChopState(CompoundTag compound) {
+        compound.putLongArray(PENDING_CHOP_TARGETS_TAG, toLongArray(pendingChopTargets, pendingChopTargets.size()));
+        compound.putLongArray(QUEUED_CHOP_TARGETS_TAG, toLongArray(queuedChopTargets, queuedChopTargets.size()));
+        compound.putLongArray(PENDING_LEAF_REMOVAL_TAG, toLongArray(pendingLeafRemoval, pendingLeafRemoval.size()));
+        if (currentChopTarget != null)
+            compound.putLong(CURRENT_CHOP_TARGET_TAG, currentChopTarget.asLong());
+        compound.putFloat(CURRENT_CHOP_PROGRESS_TAG, currentChopProgress);
+        compound.putInt(CHOP_COOLDOWN_TAG, chopCooldown);
+    }
+
+    private void loadChopState(CompoundTag compound) {
+        loadQueuedPositions(compound.getLongArray(PENDING_CHOP_TARGETS_TAG), pendingChopTargets);
+        loadUniquePositions(compound.getLongArray(QUEUED_CHOP_TARGETS_TAG), queuedChopTargets);
+        loadUniquePositions(compound.getLongArray(PENDING_LEAF_REMOVAL_TAG), pendingLeafRemoval);
+        currentChopTarget = compound.contains(CURRENT_CHOP_TARGET_TAG)
+                ? BlockPos.of(compound.getLong(CURRENT_CHOP_TARGET_TAG)).immutable()
+                : null;
+        currentChopProgress = compound.getFloat(CURRENT_CHOP_PROGRESS_TAG);
+        chopCooldown = compound.getInt(CHOP_COOLDOWN_TAG);
+    }
+
+    private void saveCommanderAndProgramStartState(CompoundTag compound) {
+        if (commanderUUID != null)
+            compound.putUUID(COMMANDER_UUID_TAG, commanderUUID);
+        compound.putBoolean(FOLLOW_COMMANDER_TAG, followCommander);
+        if (!getInstructionTape().isEmpty() && programStartPos != null)
+            compound.putLong(PROGRAM_START_POS_TAG, programStartPos.asLong());
+    }
+
+    private void loadCommanderAndProgramStartState(CompoundTag compound) {
+        commanderUUID = compound.hasUUID(COMMANDER_UUID_TAG) ? compound.getUUID(COMMANDER_UUID_TAG) : null;
+        followCommander = !compound.contains(FOLLOW_COMMANDER_TAG) || compound.getBoolean(FOLLOW_COMMANDER_TAG);
+        programStartPos = compound.contains(PROGRAM_START_POS_TAG)
+                ? BlockPos.of(compound.getLong(PROGRAM_START_POS_TAG))
+                : null;
+    }
+
     @Override
     /**
      * Implements addAdditionalSaveData behavior for the programmable pal feature.
@@ -541,15 +743,10 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         compound.put("item", itemStack.saveOptional(level().registryAccess()));
         ContainerHelper.saveAllItems(compound, inventory.getItems(), level().registryAccess());
         compound.put("HeldTool", getHeldTool().saveOptional(level().registryAccess()));
-        compound.putInt("InstructionPointer", instructionPointer);
-        compound.putInt("InstructionCooldown", instructionCooldown);
-        compound.putInt("QueuedMoveSteps", queuedMoveSteps);
-        compound.putInt("QueuedMoveDirectionIndex", queuedMoveDirectionIndex);
-        if (commanderUUID != null)
-            compound.putUUID(COMMANDER_UUID_TAG, commanderUUID);
+        saveProgramRuntimeState(compound);
+        saveChopState(compound);
+        saveCommanderAndProgramStartState(compound);
     }
-
-
 
     @Override
     /**
@@ -563,11 +760,14 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         setHeldTool(ItemStack.parseOptional(level().registryAccess(), compound.getCompound("HeldTool")));
         lastInstructionTapeSnapshot = normalizeTapeSnapshot(getInstructionTape());
         syncStateFromInventory();
-        instructionPointer = compound.getInt("InstructionPointer");
-        instructionCooldown = compound.getInt("InstructionCooldown");
-        queuedMoveSteps = compound.getInt("QueuedMoveSteps");
-        queuedMoveDirectionIndex = compound.getInt("QueuedMoveDirectionIndex");
-        commanderUUID = compound.hasUUID(COMMANDER_UUID_TAG) ? compound.getUUID(COMMANDER_UUID_TAG) : null;
+        loadProgramRuntimeState(compound);
+        loadChopState(compound);
+        loadCommanderAndProgramStartState(compound);
+        sanitizeLoadedProgramRuntimeState();
+        if (getInstructionTape().isEmpty()) {
+            programStartPos = null;
+            programActiveLastTick = false;
+        }
     }
 
 
@@ -675,9 +875,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private void runProgramTick() {
         if (isFightTapeActive()) {
             markProgramInactive();
-            queuedMoveSteps = 0;
-            queuedStepCheckInstructionData = null;
-            skipNextStandaloneCheckInstruction = false;
+            clearQueuedMoveState();
+            clearActiveRunTapeState();
             clearChopTask();
             runFightTapeBehavior();
             return;
@@ -685,9 +884,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
         if (!hasActiveInstructionTape()) {
             markProgramInactive();
-            queuedMoveSteps = 0;
-            queuedStepCheckInstructionData = null;
-            skipNextStandaloneCheckInstruction = false;
+            clearQueuedMoveState();
+            clearActiveRunTapeState();
             clearChopTask();
             return;
         }
@@ -958,6 +1156,11 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             return executeActiveRunTapeStep();
         }
 
+        if ("interact".equals(action)) {
+            executeInteract(data);
+            return true;
+        }
+
         executeMoveForward(data, schedule);
         return true;
     }
@@ -1060,29 +1263,25 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
     private void startRunTape(CompoundTag data) {
         if (!data.contains(RUN_TAPE_ITEM_TAG)) {
-            activeRunTapeProgramTag = null;
-            activeRunTapeRemainingRuns = 0;
+            clearActiveRunTapeState();
             return;
         }
 
         ItemStack nestedTape = ItemStack.parseOptional(level().registryAccess(), data.getCompound(RUN_TAPE_ITEM_TAG));
         if (nestedTape.isEmpty() || nestedTape.getItem() != ModItems.PROGRAMMABLE_TAPE.get()) {
-            activeRunTapeProgramTag = null;
-            activeRunTapeRemainingRuns = 0;
+            clearActiveRunTapeState();
             return;
         }
 
         CompoundTag nestedProgramTag = nestedTape.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
         if (nestedProgramTag == null || nestedProgramTag.isEmpty()) {
-            activeRunTapeProgramTag = null;
-            activeRunTapeRemainingRuns = 0;
+            clearActiveRunTapeState();
             return;
         }
 
         Schedule nestedSchedule = Schedule.fromTag(level().registryAccess(), nestedProgramTag);
         if (nestedSchedule.entries.isEmpty()) {
-            activeRunTapeProgramTag = null;
-            activeRunTapeRemainingRuns = 0;
+            clearActiveRunTapeState();
             return;
         }
 
@@ -1097,14 +1296,12 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
         Schedule nestedSchedule = Schedule.fromTag(level().registryAccess(), activeRunTapeProgramTag);
         if (nestedSchedule.entries.isEmpty()) {
-            activeRunTapeProgramTag = null;
-            activeRunTapeRemainingRuns = 0;
+            clearActiveRunTapeState();
             return true;
         }
 
         if (activeRunTapeInstructionPointer >= nestedSchedule.entries.size()) {
-            activeRunTapeProgramTag = null;
-            activeRunTapeRemainingRuns = 0;
+            clearActiveRunTapeState();
             return true;
         }
 
@@ -1124,10 +1321,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
                 activeRunTapeInstructionPointer = 0;
                 return false;
             }
-
-            activeRunTapeProgramTag = null;
-            activeRunTapeInstructionPointer = 0;
-            activeRunTapeRemainingRuns = 0;
+            clearActiveRunTapeState();
             return true;
         }
 
@@ -1185,6 +1379,228 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         }
     }
 
+    private void executeInteract(CompoundTag data) {
+        String target = data.getString(INTERACT_TARGET_KEY_TAG);
+        if (!target.isEmpty() && !"storage".equals(target))
+            return;
+
+        if (!data.contains(INTERACT_FILTER_ITEM_TAG))
+            return;
+
+        ItemStack filterItem = ItemStack.parseOptional(level().registryAccess(), data.getCompound(INTERACT_FILTER_ITEM_TAG));
+        if (filterItem.isEmpty())
+            return;
+
+        Container storage = getFrontStorageContainer();
+        if (storage == null)
+            return;
+
+        FilterItemStack transferFilter = FilterItemStack.of(filterItem.copy());
+        String mode = data.getString(INTERACT_MODE_KEY_TAG);
+        ItemStack keepItem = ItemStack.EMPTY;
+        if (data.contains(INTERACT_KEEP_ITEM_TAG))
+            keepItem = ItemStack.parseOptional(level().registryAccess(), data.getCompound(INTERACT_KEEP_ITEM_TAG));
+
+        if ("pull".equals(mode)) {
+            pullFilteredItemsFromStorage(storage, transferFilter, keepItem);
+            return;
+        }
+
+        pushFilteredItemsToStorage(storage, transferFilter, keepItem);
+    }
+
+    private @Nullable Container getFrontStorageContainer() {
+        BlockPos storagePos = blockPosition().relative(getDirection());
+        BlockState storageState = level().getBlockState(storagePos);
+
+        if (storageState.getBlock() instanceof ChestBlock chestBlock) {
+            Container chestContainer = ChestBlock.getContainer(chestBlock, storageState, level(), storagePos, true);
+            if (chestContainer != null)
+                return chestContainer;
+        }
+
+        BlockEntity blockEntity = level().getBlockEntity(storagePos);
+        if (blockEntity instanceof Container container)
+            return container;
+        return null;
+    }
+
+    private void pullFilteredItemsFromStorage(Container storage, FilterItemStack transferFilter, ItemStack keepItem) {
+        FilterItemStack keepFilter = keepItem.isEmpty() ? null : FilterItemStack.of(keepItem.copy());
+        int keepCurrentCount = keepFilter != null ? countPalItemsMatching(keepFilter) : 0;
+
+        boolean changed = false;
+        for (int slot = 0; slot < storage.getContainerSize(); slot++) {
+            ItemStack source = storage.getItem(slot);
+            if (source.isEmpty())
+                continue;
+            if (!transferFilter.test(level(), source))
+                continue;
+
+            boolean isKeepFilteredItem = keepFilter != null && keepFilter.test(level(), source);
+            int movable = source.getCount();
+            if (isKeepFilteredItem) {
+                int keepGoalForMatchedItem = source.getMaxStackSize();
+                int keepRemaining = Math.max(0, keepGoalForMatchedItem - keepCurrentCount);
+                if (keepRemaining <= 0)
+                    continue;
+                movable = Math.min(movable, keepRemaining);
+            }
+
+            if (movable <= 0)
+                continue;
+
+            ItemStack toMove = source.copyWithCount(movable);
+            ItemStack remainder = insertIntoPalStorage(toMove);
+            int moved = movable - remainder.getCount();
+            if (moved <= 0)
+                continue;
+
+            source.shrink(moved);
+            storage.setItem(slot, source.isEmpty() ? ItemStack.EMPTY : source);
+            changed = true;
+
+            if (isKeepFilteredItem)
+                keepCurrentCount += moved;
+        }
+
+        if (changed) {
+            storage.setChanged();
+            inventory.setChanged();
+        }
+    }
+
+    private void pushFilteredItemsToStorage(Container storage, FilterItemStack transferFilter, ItemStack keepItem) {
+        FilterItemStack keepFilter = keepItem.isEmpty() ? null : FilterItemStack.of(keepItem.copy());
+        int keepCurrentCount = keepFilter != null ? countPalItemsMatching(keepFilter) : 0;
+
+        boolean changed = false;
+        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
+            ItemStack source = inventory.getItem(slot);
+            if (source.isEmpty())
+                continue;
+            if (!transferFilter.test(level(), source))
+                continue;
+
+            boolean isKeepFilteredItem = keepFilter != null && keepFilter.test(level(), source);
+            int movable = source.getCount();
+            if (isKeepFilteredItem) {
+                int keepGoalForMatchedItem = source.getMaxStackSize();
+                int excess = Math.max(0, keepCurrentCount - keepGoalForMatchedItem);
+                movable = Math.min(movable, excess);
+            }
+
+            if (movable <= 0)
+                continue;
+
+            ItemStack toMove = source.copyWithCount(movable);
+            ItemStack remainder = insertIntoContainer(storage, toMove);
+            int moved = movable - remainder.getCount();
+            if (moved <= 0)
+                continue;
+
+            source.shrink(moved);
+            inventory.setItem(slot, source.isEmpty() ? ItemStack.EMPTY : source);
+            changed = true;
+
+            if (isKeepFilteredItem)
+                keepCurrentCount = Math.max(0, keepCurrentCount - moved);
+        }
+
+        if (changed) {
+            storage.setChanged();
+            inventory.setChanged();
+        }
+    }
+
+    private ItemStack insertIntoPalStorage(ItemStack stack) {
+        ItemStack remaining = stack.copy();
+
+        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END && !remaining.isEmpty(); slot++) {
+            ItemStack existing = inventory.getItem(slot);
+            if (existing.isEmpty())
+                continue;
+            if (!ItemStack.isSameItemSameComponents(existing, remaining))
+                continue;
+
+            int maxSize = Math.min(existing.getMaxStackSize(), inventory.getMaxStackSize());
+            int free = maxSize - existing.getCount();
+            if (free <= 0)
+                continue;
+
+            int moved = Math.min(free, remaining.getCount());
+            existing.grow(moved);
+            remaining.shrink(moved);
+            inventory.setItem(slot, existing);
+        }
+
+        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END && !remaining.isEmpty(); slot++) {
+            ItemStack existing = inventory.getItem(slot);
+            if (!existing.isEmpty())
+                continue;
+
+            int moved = Math.min(Math.min(remaining.getMaxStackSize(), inventory.getMaxStackSize()), remaining.getCount());
+            ItemStack placed = remaining.copyWithCount(moved);
+            inventory.setItem(slot, placed);
+            remaining.shrink(moved);
+        }
+
+        return remaining;
+    }
+
+    private ItemStack insertIntoContainer(Container storage, ItemStack stack) {
+        ItemStack remaining = stack.copy();
+
+        for (int slot = 0; slot < storage.getContainerSize() && !remaining.isEmpty(); slot++) {
+            ItemStack existing = storage.getItem(slot);
+            if (existing.isEmpty())
+                continue;
+            if (!ItemStack.isSameItemSameComponents(existing, remaining))
+                continue;
+            if (!storage.canPlaceItem(slot, remaining))
+                continue;
+
+            int maxSize = Math.min(existing.getMaxStackSize(), storage.getMaxStackSize());
+            int free = maxSize - existing.getCount();
+            if (free <= 0)
+                continue;
+
+            int moved = Math.min(free, remaining.getCount());
+            existing.grow(moved);
+            remaining.shrink(moved);
+            storage.setItem(slot, existing);
+        }
+
+        for (int slot = 0; slot < storage.getContainerSize() && !remaining.isEmpty(); slot++) {
+            ItemStack existing = storage.getItem(slot);
+            if (!existing.isEmpty())
+                continue;
+            if (!storage.canPlaceItem(slot, remaining))
+                continue;
+
+            int moved = Math.min(Math.min(remaining.getMaxStackSize(), storage.getMaxStackSize()), remaining.getCount());
+            ItemStack placed = remaining.copyWithCount(moved);
+            storage.setItem(slot, placed);
+            remaining.shrink(moved);
+        }
+
+        return remaining;
+    }
+
+    private int countPalItemsMatching(@Nullable FilterItemStack filter) {
+        if (filter == null)
+            return 0;
+
+        int total = 0;
+        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
+            ItemStack candidate = inventory.getItem(slot);
+            if (candidate.isEmpty())
+                continue;
+            if (filter.test(level(), candidate))
+                total += candidate.getCount();
+        }
+        return total;
+    }
     private int findMatchingInventorySlot(ItemStack configured) {
         FilterItemStack configuredFilter = FilterItemStack.of(configured.copy());
         for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
@@ -1419,3 +1835,13 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         return configuredFilter.test(level(), target);
     }
 }
+
+
+
+
+
+
+
+
+
+

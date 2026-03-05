@@ -1,4 +1,4 @@
-package com.cosmolego527.create_pp.block.Custom;
+package com.cosmolego527.create_pp.block.custom;
 
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import net.minecraft.world.level.block.StairBlock;

@@ -1,8 +1,9 @@
-package com.cosmolego527.create_pp.entity.client;
+package com.cosmolego527.create_pp.entity.programmable_pal.client;
 
 import com.cosmolego527.create_pp.CreatePP;
-import com.cosmolego527.create_pp.entity.ProgrammablePalVariant;
-import com.cosmolego527.create_pp.entity.custom.ProgrammablePalEntity;
+
+import com.cosmolego527.create_pp.entity.programmable_pal.ProgrammablePalEntity;
+import com.cosmolego527.create_pp.entity.programmable_pal.ProgrammablePalVariant;
 import com.google.common.collect.Maps;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.ChatFormatting;
@@ -19,7 +20,7 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.Map;
 
-public class ProgrammablePalRenderer extends MobRenderer<ProgrammablePalEntity, ProgramablePalModel<ProgrammablePalEntity>> {
+public class ProgrammablePalRenderer extends MobRenderer<ProgrammablePalEntity, ProgrammablePalModel<ProgrammablePalEntity>> {
 
     private static final ResourceLocation PAL_NAMED_COSMO = ResourceLocation.fromNamespaceAndPath(CreatePP.MOD_ID, "textures/entity/programmable_pal/special/programmablepal_named_cosmo.png");
     private static final ResourceLocation RAINBOW_PAL = ResourceLocation.fromNamespaceAndPath(CreatePP.MOD_ID, "textures/entity/programmable_pal/special/programablepaltexturerainbow.png");
@@ -47,7 +48,7 @@ public class ProgrammablePalRenderer extends MobRenderer<ProgrammablePalEntity, 
 
 
     public ProgrammablePalRenderer(EntityRendererProvider.Context context) {
-        super(context, new ProgramablePalModel<>(context.bakeLayer(ProgramablePalModel.LAYER_LOCATION)), 0.3f);
+        super(context, new ProgrammablePalModel<>(context.bakeLayer(ProgrammablePalModel.LAYER_LOCATION)), 0.3f);
         addLayer(new HeldToolLayer(this));
     }
 
@@ -72,9 +73,9 @@ public class ProgrammablePalRenderer extends MobRenderer<ProgrammablePalEntity, 
     /**
      * Render layer responsible for drawing the assigned tool in the Pal's hand.
      */
-    private static class HeldToolLayer extends RenderLayer<ProgrammablePalEntity, ProgramablePalModel<ProgrammablePalEntity>> {
+    private static class HeldToolLayer extends RenderLayer<ProgrammablePalEntity, ProgrammablePalModel<ProgrammablePalEntity>> {
 
-        protected HeldToolLayer(RenderLayerParent<ProgrammablePalEntity, ProgramablePalModel<ProgrammablePalEntity>> renderer) {
+        protected HeldToolLayer(RenderLayerParent<ProgrammablePalEntity, ProgrammablePalModel<ProgrammablePalEntity>> renderer) {
             super(renderer);
         }
 
@@ -101,3 +102,4 @@ public class ProgrammablePalRenderer extends MobRenderer<ProgrammablePalEntity, 
     }
 
 }
+

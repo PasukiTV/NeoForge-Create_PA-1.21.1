@@ -30,3 +30,5 @@ public abstract class TextFunctionInstruction extends FunctionInstruction{
     @OnlyIn(Dist.CLIENT)
     protected void modifyEditBox(EditBox box){}
 }
+
+

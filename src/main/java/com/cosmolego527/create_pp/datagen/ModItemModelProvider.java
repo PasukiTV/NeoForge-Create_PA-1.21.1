@@ -46,3 +46,5 @@ public class ModItemModelProvider extends ItemModelProvider {
         basicItem(ModItems.PROGRAMMABLE_PAL_KIT_BROWN.get());
     }
 }
+
+

@@ -1,14 +1,12 @@
-package com.cosmolego527.create_pp.item.custom;
+package com.cosmolego527.create_pp.item.pal_kit;
 
 import com.cosmolego527.create_pp.CreatePP;
-import com.cosmolego527.create_pp.entity.ProgrammablePalVariant;
-import com.cosmolego527.create_pp.entity.custom.ProgrammablePalEntity;
+import com.cosmolego527.create_pp.entity.programmable_pal.ProgrammablePalEntity;
+import com.cosmolego527.create_pp.entity.programmable_pal.ProgrammablePalVariant;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -18,11 +16,11 @@ import net.minecraft.world.phys.Vec3;
 
 public class ProgrammablePalKitItem extends Item {
 
-    public ProgrammablePalVariant Variant;
+    private final ProgrammablePalVariant variant;
 
     public ProgrammablePalKitItem(Properties properties, ProgrammablePalVariant variant) {
         super(properties);
-        this.Variant = variant;
+        this.variant = variant;
     }
 
     public static ProgrammablePalKitItem PPalWhite(Properties p){return new ProgrammablePalKitItem(p, ProgrammablePalVariant.WHITE);}
@@ -44,48 +42,38 @@ public class ProgrammablePalKitItem extends Item {
     public static ProgrammablePalKitItem PPalDefault(Properties p){return new ProgrammablePalKitItem(p, ProgrammablePalVariant.DEFAULT);}
 
     @Override
-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
-        ItemStack itemStack = player.getItemInHand(hand);
-        player.startUsingItem(hand);
-        return InteractionResultHolder.success(itemStack);
-    }
-
-    @Override
     public String getDescriptionId() {
-        return "item." + CreatePP.MOD_ID + ".programmable_pal_kit_" + Variant.name().toLowerCase();
-    }
-
-    @Override
-    public boolean hasCustomEntity(ItemStack stack) {
-        return true;
+        return "item." + CreatePP.MOD_ID + ".programmable_pal_kit_" + variant.name().toLowerCase();
     }
 
     @Override
     public InteractionResult useOn(UseOnContext context) {
         Level level = context.getLevel();
-
-        float h = 0.875f, r = 0.625f/2f;
+        Player player = context.getPlayer();
 
         BlockPos block = context.getClickedPos();
-        Vec3 point = context.getClickLocation();
         Direction direction = context.getClickedFace();
-        if(direction.getAxis().isHorizontal()) point = point.add(Vec3.atLowerCornerOf(direction.getNormal()).scale(r));
-        var blockPos = block.relative(direction);
-        var pos = blockPos.getBottomCenter();
+        BlockPos blockPos = block.relative(direction);
+        Vec3 pos = blockPos.getBottomCenter();
+
         if (!level.getBlockState(blockPos).isAir()) {
-            context.getPlayer().displayClientMessage(Component.literal("Programmable Pal requires more space"), true);
-            return super.useOn(context);
+            if (player != null)
+                player.displayClientMessage(Component.literal("Programmable Pal requires more space"), true);
+            return InteractionResult.FAIL;
         }
+
+        if (level.isClientSide)
+            return InteractionResult.SUCCESS;
 
         ProgrammablePalEntity entity = new ProgrammablePalEntity(level, pos);
         ItemStack itemInHand = context.getItemInHand();
-        var item = itemInHand.copy();
+        ItemStack item = itemInHand.copy();
         item.setCount(1);
         entity.setItem(item);
-        entity.setVariant(Variant);
+        entity.setVariant(variant);
         level.addFreshEntity(entity);
         itemInHand.shrink(1);
-        return InteractionResult.SUCCESS;
+        return InteractionResult.CONSUME;
     }
 
     public static boolean isPal(ItemStack stack) {

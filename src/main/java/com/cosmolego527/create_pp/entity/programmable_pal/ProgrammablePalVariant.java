@@ -1,4 +1,4 @@
-package com.cosmolego527.create_pp.entity;
+package com.cosmolego527.create_pp.entity.programmable_pal;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -36,3 +36,5 @@ public enum ProgrammablePalVariant {
         return BY_ID[id % BY_ID.length];
     }
 }
+
+

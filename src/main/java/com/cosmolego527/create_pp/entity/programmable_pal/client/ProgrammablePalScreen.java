@@ -1,6 +1,6 @@
-package com.cosmolego527.create_pp.entity.client;
+package com.cosmolego527.create_pp.entity.programmable_pal.client;
 
-import com.cosmolego527.create_pp.entity.menu.ProgrammablePalMenu;
+import com.cosmolego527.create_pp.entity.programmable_pal.menu.ProgrammablePalMenu;
 import com.cosmolego527.create_pp.network.ResetPalProgramPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -58,3 +58,4 @@ public class ProgrammablePalScreen extends AbstractContainerScreen<ProgrammableP
         renderTooltip(guiGraphics, mouseX, mouseY);
     }
 }
+

@@ -1,8 +1,8 @@
 package com.cosmolego527.create_pp.entity;
 
 import com.cosmolego527.create_pp.CreatePP;
-import com.cosmolego527.create_pp.entity.client.ProgrammablePalRenderer;
-import com.cosmolego527.create_pp.entity.custom.ProgrammablePalEntity;
+import com.cosmolego527.create_pp.entity.programmable_pal.client.ProgrammablePalRenderer;
+import com.cosmolego527.create_pp.entity.programmable_pal.ProgrammablePalEntity;
 import com.simibubi.create.foundation.data.CreateEntityBuilder;
 import com.tterrag.registrate.util.entry.EntityEntry;
 import com.tterrag.registrate.util.nullness.NonNullConsumer;
@@ -52,3 +52,5 @@ public class ModEntities {
 
 
 }
+
+

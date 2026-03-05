@@ -44,11 +44,11 @@ public class ModRecipeProvider extends RecipeProvider implements IConditionBuild
                 .unlockedBy("has_precision_mechanism", has(AllItems.PRECISION_MECHANISM)).save(recipeOutput);
 
         SingleItemRecipeBuilder.stonecutting(Ingredient.of(AllBlocks.INDUSTRIAL_IRON_BLOCK),RecipeCategory.BUILDING_BLOCKS, ModBlocks.FACTORY_FLOOR)
-                        .unlockedBy("has_industrial_iron", has(AllBlocks.INDUSTRIAL_IRON_BLOCK))
-                        .save(recipeOutput, "create_programmablepals:factory_floor_from_industrial_iron_stonecutting");
+                .unlockedBy("has_industrial_iron", has(AllBlocks.INDUSTRIAL_IRON_BLOCK))
+                .save(recipeOutput, "create_programmablepals:factory_floor_from_industrial_iron_stonecutting");
         SingleItemRecipeBuilder.stonecutting(Ingredient.of(Items.IRON_INGOT),RecipeCategory.BUILDING_BLOCKS, ModBlocks.FACTORY_FLOOR, 2)
-                        .unlockedBy("has_iron_ingot", has(Items.IRON_INGOT))
-                        .save(recipeOutput, "create_programmablepals:factory_floor_from_iron_ingot_stonecutting");
+                .unlockedBy("has_iron_ingot", has(Items.IRON_INGOT))
+                .save(recipeOutput, "create_programmablepals:factory_floor_from_iron_ingot_stonecutting");
 
         ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, ModItems.PROGRAMMABLE_PAL_KIT_DEFAULT.get())
                 .requires(ModTags.AllItemTags.PROGRAMMABLE_PAL_ITEM.tag)
@@ -79,3 +79,5 @@ public class ModRecipeProvider extends RecipeProvider implements IConditionBuild
         }
     }
 }
+
+

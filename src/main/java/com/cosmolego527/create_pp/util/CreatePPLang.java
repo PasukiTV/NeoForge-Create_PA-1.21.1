@@ -16,9 +16,9 @@ import java.util.List;
 public class CreatePPLang extends Lang {
 
 	public static MutableComponent translateDirect(String key, Object... args) {
-        Object[] args1 = LangBuilder.resolveBuilders(args);
-        return Component.translatable(CreatePP.MOD_ID + "." + key, args1);
-    }
+		Object[] args1 = LangBuilder.resolveBuilders(args);
+		return Component.translatable(CreatePP.MOD_ID + "." + key, args1);
+	}
 
 	public static List<Component> translatedOptions(String prefix, String... keys) {
 		List<Component> result = new ArrayList<>(keys.length);
@@ -64,3 +64,5 @@ public class CreatePPLang extends Lang {
 	}
 
 }
+
+

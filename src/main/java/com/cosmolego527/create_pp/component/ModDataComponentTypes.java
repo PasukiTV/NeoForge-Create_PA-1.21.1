@@ -40,3 +40,5 @@ public class ModDataComponentTypes {
         DATA_COMPONENT_TYPES.register(modEventBus);
     }
 }
+
+

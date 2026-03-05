@@ -47,7 +47,7 @@ public abstract class FunctionInstruction extends FunctionDataEntry{
 
         if (supplier == null) {
             Create.LOGGER.warn("Could not parse schedule instruction type: " + location);
-           // return new MovementInstruction();
+            // return new MovementInstruction();
         }
 
         FunctionInstruction scheduleDestination = supplier.get();
@@ -60,3 +60,5 @@ public abstract class FunctionInstruction extends FunctionDataEntry{
     }
 
 }
+
+

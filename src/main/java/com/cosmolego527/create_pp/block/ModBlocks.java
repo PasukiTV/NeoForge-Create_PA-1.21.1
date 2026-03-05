@@ -1,9 +1,9 @@
 package com.cosmolego527.create_pp.block;
 
 import com.cosmolego527.create_pp.CreatePP;
-import com.cosmolego527.create_pp.block.Custom.WrenchableBlock;
-import com.cosmolego527.create_pp.block.Custom.WrenchableSlabBlock;
-import com.cosmolego527.create_pp.block.Custom.WrenchableStairBlock;
+import com.cosmolego527.create_pp.block.custom.WrenchableBlock;
+import com.cosmolego527.create_pp.block.custom.WrenchableSlabBlock;
+import com.cosmolego527.create_pp.block.custom.WrenchableStairBlock;
 import com.cosmolego527.create_pp.item.ModCreativeModeTabs;
 import com.cosmolego527.create_pp.item.ModItems;
 import com.simibubi.create.foundation.data.BuilderTransformers;

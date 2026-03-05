@@ -1,7 +1,7 @@
 package com.cosmolego527.create_pp.network;
 
 import com.cosmolego527.create_pp.CreatePP;
-import com.cosmolego527.create_pp.entity.menu.ProgrammablePalMenu;
+import com.cosmolego527.create_pp.entity.programmable_pal.menu.ProgrammablePalMenu;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -35,3 +35,4 @@ public record ResetPalProgramPacket(int palEntityId) implements CustomPacketPayl
         });
     }
 }
+

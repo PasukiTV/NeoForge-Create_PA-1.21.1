@@ -25,3 +25,5 @@ public class ModItemTagProvider extends ItemTagsProvider {
 
     }
 }
+
+

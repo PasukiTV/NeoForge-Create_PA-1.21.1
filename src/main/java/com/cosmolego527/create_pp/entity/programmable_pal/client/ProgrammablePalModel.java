@@ -1,7 +1,7 @@
-package com.cosmolego527.create_pp.entity.client;
+package com.cosmolego527.create_pp.entity.programmable_pal.client;
 
 import com.cosmolego527.create_pp.CreatePP;
-import com.cosmolego527.create_pp.entity.custom.ProgrammablePalEntity;
+import com.cosmolego527.create_pp.entity.programmable_pal.ProgrammablePalEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.model.EntityModel;
@@ -15,7 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 
-public class ProgramablePalModel<T extends ProgrammablePalEntity> extends HierarchicalModel<T> {
+public class ProgrammablePalModel<T extends ProgrammablePalEntity> extends HierarchicalModel<T> {
 
 
 
@@ -27,7 +27,7 @@ public class ProgramablePalModel<T extends ProgrammablePalEntity> extends Hierar
     private final ModelPart head;
     private final ModelPart armR;
 
-    public ProgramablePalModel(ModelPart root) {
+    public ProgrammablePalModel(ModelPart root) {
         super(RenderType::entityTranslucent);
         this.body = root.getChild("Body");
         this.head = this.body.getChild("Head");
@@ -64,8 +64,8 @@ public class ProgramablePalModel<T extends ProgrammablePalEntity> extends Hierar
         this.root().getAllParts().forEach(ModelPart::resetPose);
         this.applyHeadRotation(netHeadYaw, headPitch);
 
-        this.animateWalk(ProgrammabelPalAnimations.ANIM_PP_WALK2, limbSwing, limbSwingAmount, 2f, 2.5f);
-        this.animate(entity.idleAnimationState, ProgrammabelPalAnimations.ANIM_PP_IDLE, ageInTicks, 1f);
+        this.animateWalk(ProgrammablePalAnimations.ANIM_PP_WALK2, limbSwing, limbSwingAmount, 2f, 2.5f);
+        this.animate(entity.idleAnimationState, ProgrammablePalAnimations.ANIM_PP_IDLE, ageInTicks, 1f);
     }
 
     private void applyHeadRotation(float headYaw, float headPitch){
@@ -96,3 +96,5 @@ public class ProgramablePalModel<T extends ProgrammablePalEntity> extends Hierar
         return body;
     }
 }
+
+

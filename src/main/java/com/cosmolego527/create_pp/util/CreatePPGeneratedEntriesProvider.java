@@ -22,3 +22,5 @@ public class CreatePPGeneratedEntriesProvider extends DatapackBuiltinEntriesProv
         return "Create: Programmable Pals' Generated Registry Entries";
     }
 }
+
+

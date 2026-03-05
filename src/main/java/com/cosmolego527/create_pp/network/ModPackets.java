@@ -16,3 +16,4 @@ public class ModPackets {
         registrar.playToServer(ResetPalProgramPacket.TYPE, ResetPalProgramPacket.STREAM_CODEC, ResetPalProgramPacket::handle);
     }
 }
+

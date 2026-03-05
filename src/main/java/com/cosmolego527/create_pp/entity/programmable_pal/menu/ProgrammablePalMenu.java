@@ -1,6 +1,6 @@
-package com.cosmolego527.create_pp.entity.menu;
+package com.cosmolego527.create_pp.entity.programmable_pal.menu;
 
-import com.cosmolego527.create_pp.entity.custom.ProgrammablePalEntity;
+import com.cosmolego527.create_pp.entity.programmable_pal.ProgrammablePalEntity;
 import com.cosmolego527.create_pp.util.ModTags;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.Container;
@@ -112,3 +112,5 @@ public class ProgrammablePalMenu extends AbstractContainerMenu {
         pal.resetToProgramStart();
     }
 }
+
+

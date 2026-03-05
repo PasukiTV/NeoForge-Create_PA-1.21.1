@@ -1,8 +1,8 @@
 package com.cosmolego527.create_pp.item;
 
 import com.cosmolego527.create_pp.CreatePP;
-import com.cosmolego527.create_pp.item.custom.ProgrammablePalKitItem;
-import com.cosmolego527.create_pp.item.tapes.TapeProgramType;
+import com.cosmolego527.create_pp.item.pal_kit.ProgrammablePalKitItem;
+import com.cosmolego527.create_pp.item.tape_program.TapeProgramType;
 import com.cosmolego527.create_pp.sound.ModSounds;
 import com.simibubi.create.foundation.data.CreateRegistrate;
 import com.tterrag.registrate.util.entry.ItemEntry;
@@ -25,8 +25,8 @@ public class ModItems {
             CreatePP.REGISTRATE.item("programmable_tape", TapeProgramType::programmableTapeItem)
                     .register(),
             FIGHT_TAPE =
-            CreatePP.REGISTRATE.item("fight_tape", TapeProgramType::fightTapeItem)
-                    .register();
+                    CreatePP.REGISTRATE.item("fight_tape", TapeProgramType::fightTapeItem)
+                            .register();
 /*
             VOID_FUNCTION_TAPE =
             CreatePP.REGISTRATE.item("void_function_tape", TapeProgramType::voidFuncItem)
@@ -124,3 +124,5 @@ public class ModItems {
 
     }
 }
+
+

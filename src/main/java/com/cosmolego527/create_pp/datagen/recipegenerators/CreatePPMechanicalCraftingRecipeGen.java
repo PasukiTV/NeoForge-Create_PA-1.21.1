@@ -17,17 +17,17 @@ public class CreatePPMechanicalCraftingRecipeGen extends MechanicalCraftingRecip
     GeneratedRecipe
 
             PROGRAMMABLE_PAL_WHITE = create(ModItems.PROGRAMMABLE_PAL_KIT_WHITE::get)
-                    .recipe(b->b
-                            .key('G', Ingredient.of(Items.WHITE_STAINED_GLASS))
-                            .key('P', Ingredient.of(ModItems.AUTOMATON_PROCESSOR))
-                            .key('A', Ingredient.of(AllBlocks.ANDESITE_CASING))
-                            .key('B', Ingredient.of(AllItems.BRASS_HAND))
-                            .key('C', Ingredient.of(AllItems.COPPER_DIVING_BOOTS))
-                            .patternLine(" G ")
-                            .patternLine(" P ")
-                            .patternLine("BAB")
-                            .patternLine(" C ")
-                            .disallowMirrored()),
+            .recipe(b->b
+                    .key('G', Ingredient.of(Items.WHITE_STAINED_GLASS))
+                    .key('P', Ingredient.of(ModItems.AUTOMATON_PROCESSOR))
+                    .key('A', Ingredient.of(AllBlocks.ANDESITE_CASING))
+                    .key('B', Ingredient.of(AllItems.BRASS_HAND))
+                    .key('C', Ingredient.of(AllItems.COPPER_DIVING_BOOTS))
+                    .patternLine(" G ")
+                    .patternLine(" P ")
+                    .patternLine("BAB")
+                    .patternLine(" C ")
+                    .disallowMirrored()),
             PROGRAMMABLE_PAL_LIGHTGRAY = create(ModItems.PROGRAMMABLE_PAL_KIT_LIGHTGRAY::get)
                     .recipe(b->b
                             .key('G', Ingredient.of(Items.LIGHT_GRAY_STAINED_GLASS))
@@ -209,7 +209,7 @@ public class CreatePPMechanicalCraftingRecipeGen extends MechanicalCraftingRecip
                             .patternLine(" C ")
                             .disallowMirrored())
 
-    ;
+                    ;
 
     public CreatePPMechanicalCraftingRecipeGen(PackOutput output, CompletableFuture<HolderLookup.Provider> registries) {
         super(output, registries, CreatePP.MOD_ID);

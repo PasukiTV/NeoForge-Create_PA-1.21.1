@@ -7,3 +7,5 @@ import net.neoforged.fml.common.EventBusSubscriber;
 public class ModEvents {
 
 }
+
+

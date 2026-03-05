@@ -32,3 +32,5 @@ public abstract class FunctionDataEntry implements IFunctionInput{
 
     protected int intData(String key) {return data.getInt(key);}
 }
+
+

@@ -1,6 +1,7 @@
-package com.cosmolego527.create_pp.entity;
+package com.cosmolego527.create_pp.entity.programmable_pal;
 
 import com.cosmolego527.create_pp.CreatePP;
+import com.cosmolego527.create_pp.entity.programmable_pal.ProgrammablePalVariant;
 import com.google.common.collect.ImmutableList;
 import net.minecraft.resources.ResourceLocation;
 
@@ -36,3 +37,5 @@ public class ProgrammablePalStyles {
             new PPalStyle("programmable_pal_kit", ProgrammablePalVariant.DEFAULT, true)
     );
 }
+
+

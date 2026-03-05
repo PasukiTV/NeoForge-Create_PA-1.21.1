@@ -36,25 +36,25 @@ public class CreatePPRegistrateTags {
         TagGen.CreateTagsProvider<Item> prov = new TagGen.CreateTagsProvider<>(provIn, Item::builtInRegistryHolder);
 
         prov.tag(ModTags.AllItemTags.PROGRAMMABLE_PAL_ITEM.tag)
-                        .add(
-                                ModItems.PROGRAMMABLE_PAL_KIT_WHITE.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_LIGHTGRAY.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_GRAY.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_BLACK.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_RED.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_ORANGE.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_YELLOW.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_LIME.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_GREEN.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_LIGHTBLUE.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_CYAN.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_BLUE.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_PURPLE.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_MAGENTA.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_PINK.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_BROWN.get(),
-                                ModItems.PROGRAMMABLE_PAL_KIT_DEFAULT.get()
-                        );
+                .add(
+                        ModItems.PROGRAMMABLE_PAL_KIT_WHITE.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_LIGHTGRAY.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_GRAY.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_BLACK.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_RED.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_ORANGE.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_YELLOW.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_LIME.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_GREEN.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_LIGHTBLUE.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_CYAN.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_BLUE.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_PURPLE.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_MAGENTA.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_PINK.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_BROWN.get(),
+                        ModItems.PROGRAMMABLE_PAL_KIT_DEFAULT.get()
+                );
         prov.tag(ModTags.AllItemTags.PROGRAMMABLE_INSTRUCTION_ITEM.tag)
                 .add(ModItems.PROGRAMMABLE_TAPE.get())
                 .add(ModItems.FIGHT_TAPE.get());
@@ -86,4 +86,6 @@ public class CreatePPRegistrateTags {
         }
     }
 }
+
+
 

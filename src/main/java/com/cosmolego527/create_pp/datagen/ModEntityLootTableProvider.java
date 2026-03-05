@@ -16,3 +16,5 @@ public class ModEntityLootTableProvider extends EntityLootSubProvider {
         this.add(ModEntities.PROGRAMMABLE_PAL_ENTITY.get(), LootTable.lootTable());
     }
 }
+
+
