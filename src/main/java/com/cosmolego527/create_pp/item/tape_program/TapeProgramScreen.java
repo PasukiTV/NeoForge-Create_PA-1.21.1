@@ -36,6 +36,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.resources.ResourceLocation;
@@ -48,6 +49,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMenu> implements ScreenWithStencils {
@@ -87,6 +89,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private IconButton editorConfirm, editorDelete;
     private ModularGuiLine editorSubWidgets;
     private Consumer<Boolean> onEditorClose;
+    private final TapeActionInputStrategyRegistry actionInputStrategyRegistry = TapeActionInputStrategyRegistry.createDefault();
+    private final TapeInstructionCodec instructionCodec = new TapeInstructionCodec();
     private final IdentityHashMap<ScheduleInstruction, Integer> actionSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Integer> checkBlockTargetSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Integer> rotateOptionSelection = new IdentityHashMap<>();
@@ -202,6 +206,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
     private static final int MIN_MOVE_DISTANCE = 1;
     private static final int MAX_MOVE_DISTANCE = 99;
+    private static final String MOVE_LINK_TOOLTIP_PREFIX = "Link next Check after each Move step: ";
 
     private static final String ACTION_KEY_TAG = "PalActionKey";
     private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
@@ -329,15 +334,12 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         moveLinkToggleButton.withCallback(() -> {
             editingMoveStepCheckLink = !editingMoveStepCheckLink;
             moveLinkToggleButton.green = editingMoveStepCheckLink;
-            moveLinkToggleButton.getToolTip().clear();
-            moveLinkToggleButton.getToolTip().add(Component.literal("Link next Check after each Move step: " + (editingMoveStepCheckLink ? "ON" : "OFF")));
+            updateMoveLinkToggleTooltip();
         });
         if (allowDeletion)
             editorDelete = new IconButton(leftPos + 56 - 45, topPos + 65 + 22, AllIcons.I_TRASH);
         menu.slotsActive = true;
-        menu.targetSlotsActive = 0;
-        menu.ghostInventory.setStackInSlot(0, ItemStack.EMPTY);
-        menu.ghostInventory.setStackInSlot(1, ItemStack.EMPTY);
+        clearEditorTargetSlots();
 
         for (int i = 0; i < field.slotsTargeted(); i++) {
             ItemStack item = field.getItem(i);
@@ -371,12 +373,12 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
             scrollInput.forOptions(PAL_ACTION_OPTIONS)
                     .titled(Component.literal("Action"))
+                    .setState(editingActionIndex)
                     .writingTo(scrollInputLabel)
                     .calling(index -> {
                         editingActionIndex = index;
                         updateSecondarySelector();
-                    })
-                    .setState(editingActionIndex);
+                    });
             updateSecondarySelector();
         }
 
@@ -413,164 +415,106 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     }
 
     private int clampIndex(int value, int size) {
-        return Mth.clamp(value, 0, size - 1);
+        return instructionCodec.clampIndex(value, size);
     }
 
-    private int getStoredIndexOrDefault(CompoundTag data, String key, IdentityHashMap<ScheduleInstruction, Integer> cache,
-                                        ScheduleInstruction instruction, int fallback) {
-        return data.contains(key) ? data.getInt(key) : cache.getOrDefault(instruction, fallback);
-    }
     /**
      * Returns data needed by getCheckBlockTargetIndex.
      */
     private int getCheckBlockTargetIndex(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        int stored = getStoredIndexOrDefault(data, CHECK_BLOCK_TARGET_INDEX_TAG, checkBlockTargetSelection, instruction, 0);
-        return clampIndex(stored, CHECK_BLOCK_TARGET_OPTIONS.size());
+        return instructionCodec.getStoredClampedIndex(instruction, CHECK_BLOCK_TARGET_INDEX_TAG,
+                checkBlockTargetSelection, 0, CHECK_BLOCK_TARGET_OPTIONS.size());
     }
 
     /**
      * Returns data needed by getCheckBlockMatchActionIndex.
      */
     private int getCheckBlockMatchActionIndex(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        if (data.contains(CHECK_BLOCK_MATCH_ACTION_KEY_TAG)) {
-            String storedKey = data.getString(CHECK_BLOCK_MATCH_ACTION_KEY_TAG);
-            int byKey = CHECK_BLOCK_MATCH_ACTION_KEYS.indexOf(storedKey);
-            if (byKey >= 0)
-                return clampIndex(byKey, CHECK_BLOCK_MATCH_ACTION_OPTIONS.size());
-        }
-
-        return clampIndex(checkBlockMatchActionSelection.getOrDefault(instruction, 0),
-                CHECK_BLOCK_MATCH_ACTION_OPTIONS.size());
+        return instructionCodec.getKeyedIndexOrCached(instruction, CHECK_BLOCK_MATCH_ACTION_KEY_TAG,
+                CHECK_BLOCK_MATCH_ACTION_KEYS, checkBlockMatchActionSelection, CHECK_BLOCK_MATCH_ACTION_OPTIONS.size());
     }
 
     /**
      * Returns data needed by getCheckBlockMatchItem.
      */
     private ItemStack getCheckBlockMatchItem(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        if (!data.contains(CHECK_BLOCK_MATCH_ITEM_TAG))
-            return ItemStack.EMPTY;
-
-        HolderLookup.Provider provider = menu.player.registryAccess();
-        return ItemStack.parseOptional(provider, data.getCompound(CHECK_BLOCK_MATCH_ITEM_TAG));
+        return instructionCodec.getOptionalItem(instruction, CHECK_BLOCK_MATCH_ITEM_TAG, menu.player.registryAccess());
     }
 
     /**
      * Returns data needed by getCheckBlockMatchActionKeyForIndex.
      */
     private String getCheckBlockMatchActionKeyForIndex(int index) {
-        int clamped = clampIndex(index, CHECK_BLOCK_MATCH_ACTION_KEYS.size());
-        return CHECK_BLOCK_MATCH_ACTION_KEYS.get(clamped);
+        return instructionCodec.getKeyForIndex(index, CHECK_BLOCK_MATCH_ACTION_KEYS);
     }
 
     private int getHasItemTargetIndex(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        int stored = data.contains(HAS_ITEM_TARGET_INDEX_TAG) ? data.getInt(HAS_ITEM_TARGET_INDEX_TAG) : 0;
-        return clampIndex(stored, CHECK_BLOCK_TARGET_OPTIONS.size());
+        return instructionCodec.getTagIntClampedOrDefault(instruction, HAS_ITEM_TARGET_INDEX_TAG, 0,
+                CHECK_BLOCK_TARGET_OPTIONS.size());
     }
 
     private int getHasItemActionIndex(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        if (data.contains(HAS_ITEM_ACTION_KEY_TAG)) {
-            int byKey = HAS_ITEM_ACTION_KEYS.indexOf(data.getString(HAS_ITEM_ACTION_KEY_TAG));
-            if (byKey >= 0)
-                return clampIndex(byKey, HAS_ITEM_ACTION_OPTIONS.size());
-        }
-        return 0;
+        return instructionCodec.getKeyedIndexOrDefault(instruction, HAS_ITEM_ACTION_KEY_TAG, HAS_ITEM_ACTION_KEYS, 0,
+                HAS_ITEM_ACTION_OPTIONS.size());
     }
 
     private ItemStack getHasItemMatchItem(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        if (!data.contains(HAS_ITEM_MATCH_ITEM_TAG))
-            return ItemStack.EMPTY;
-        return ItemStack.parseOptional(menu.player.registryAccess(), data.getCompound(HAS_ITEM_MATCH_ITEM_TAG));
+        return instructionCodec.getOptionalItem(instruction, HAS_ITEM_MATCH_ITEM_TAG, menu.player.registryAccess());
     }
 
     private String getHasItemActionKeyForIndex(int index) {
-        int clamped = clampIndex(index, HAS_ITEM_ACTION_KEYS.size());
-        return HAS_ITEM_ACTION_KEYS.get(clamped);
+        return instructionCodec.getKeyForIndex(index, HAS_ITEM_ACTION_KEYS);
     }
 
     private ItemStack getRunTapeItem(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        if (data.contains(RUN_TAPE_ITEM_TAG)) {
-            ItemStack stored = ItemStack.parseOptional(menu.player.registryAccess(), data.getCompound(RUN_TAPE_ITEM_TAG));
-            if (!stored.isEmpty())
-                return stored;
-        }
-
-        ItemStack fallback = instruction.getItem(0);
-        return fallback == null ? ItemStack.EMPTY : fallback;
+        return instructionCodec.getRunTapeItem(instruction, RUN_TAPE_ITEM_TAG, menu.player.registryAccess());
     }
 
     private int getRunTapeRepeatIndex(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        int stored = getStoredIndexOrDefault(data, RUN_TAPE_REPEAT_COUNT_TAG, runTapeRepeatSelection, instruction, 0);
-        return clampIndex(stored, MAX_MOVE_DISTANCE);
+        return instructionCodec.getStoredClampedIndex(instruction, RUN_TAPE_REPEAT_COUNT_TAG, runTapeRepeatSelection, 0,
+                MAX_MOVE_DISTANCE);
     }
 
 
     private int getInteractTargetIndex(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        if (data.contains(INTERACT_TARGET_KEY_TAG)) {
-            int byKey = INTERACT_TARGET_KEYS.indexOf(data.getString(INTERACT_TARGET_KEY_TAG));
-            if (byKey >= 0)
-                return clampIndex(byKey, INTERACT_TARGET_OPTIONS.size());
-        }
-        return clampIndex(interactTargetSelection.getOrDefault(instruction, 0), INTERACT_TARGET_OPTIONS.size());
+        return instructionCodec.getKeyedIndexOrCached(instruction, INTERACT_TARGET_KEY_TAG,
+                INTERACT_TARGET_KEYS, interactTargetSelection, INTERACT_TARGET_OPTIONS.size());
     }
 
     private int getInteractModeIndex(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        if (data.contains(INTERACT_MODE_KEY_TAG)) {
-            int byKey = INTERACT_MODE_KEYS.indexOf(data.getString(INTERACT_MODE_KEY_TAG));
-            if (byKey >= 0)
-                return clampIndex(byKey, INTERACT_MODE_OPTIONS.size());
-        }
-        return clampIndex(interactModeSelection.getOrDefault(instruction, 0), INTERACT_MODE_OPTIONS.size());
+        return instructionCodec.getKeyedIndexOrCached(instruction, INTERACT_MODE_KEY_TAG,
+                INTERACT_MODE_KEYS, interactModeSelection, INTERACT_MODE_OPTIONS.size());
     }
 
     private String getInteractTargetKeyForIndex(int index) {
-        int clamped = clampIndex(index, INTERACT_TARGET_KEYS.size());
-        return INTERACT_TARGET_KEYS.get(clamped);
+        return instructionCodec.getKeyForIndex(index, INTERACT_TARGET_KEYS);
     }
 
     private String getInteractModeKeyForIndex(int index) {
-        int clamped = clampIndex(index, INTERACT_MODE_KEYS.size());
-        return INTERACT_MODE_KEYS.get(clamped);
+        return instructionCodec.getKeyForIndex(index, INTERACT_MODE_KEYS);
     }
 
     private ItemStack getInteractFilterItem(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        if (!data.contains(INTERACT_FILTER_ITEM_TAG))
-            return ItemStack.EMPTY;
-        return ItemStack.parseOptional(menu.player.registryAccess(), data.getCompound(INTERACT_FILTER_ITEM_TAG));
+        return instructionCodec.getOptionalItem(instruction, INTERACT_FILTER_ITEM_TAG, menu.player.registryAccess());
     }
 
     private ItemStack getInteractKeepItem(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        if (!data.contains(INTERACT_KEEP_ITEM_TAG))
-            return ItemStack.EMPTY;
-        return ItemStack.parseOptional(menu.player.registryAccess(), data.getCompound(INTERACT_KEEP_ITEM_TAG));
+        return instructionCodec.getOptionalItem(instruction, INTERACT_KEEP_ITEM_TAG, menu.player.registryAccess());
     }
     /**
      * Returns data needed by getRotateOptionIndex.
      */
     private int getRotateOptionIndex(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        int stored = getStoredIndexOrDefault(data, ROTATE_OPTION_INDEX_TAG, rotateOptionSelection, instruction, 0);
-        return clampIndex(stored, ROTATE_OPTIONS.size());
+        return instructionCodec.getStoredClampedIndex(instruction, ROTATE_OPTION_INDEX_TAG, rotateOptionSelection, 0,
+                ROTATE_OPTIONS.size());
     }
 
     /**
      * Returns data needed by getMoveDistanceIndex.
      */
     private int getMoveDistanceIndex(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        int stored = getStoredIndexOrDefault(data, MOVE_DISTANCE_INDEX_TAG, moveDistanceSelection, instruction, 0);
-        return clampIndex(stored, MAX_MOVE_DISTANCE);
+        return instructionCodec.getStoredClampedIndex(instruction, MOVE_DISTANCE_INDEX_TAG, moveDistanceSelection, 0,
+                MAX_MOVE_DISTANCE);
     }
 
 
@@ -578,10 +522,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
      * Checks whether move instruction should run the following check-block after each step.
      */
     private boolean getMoveStepCheckLinkEnabled(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        if (data.contains(MOVE_STEP_CHECK_LINK_TAG))
-            return data.getBoolean(MOVE_STEP_CHECK_LINK_TAG);
-        return moveStepCheckLinkSelection.getOrDefault(instruction, false);
+        return instructionCodec.getBooleanOrDefault(instruction, MOVE_STEP_CHECK_LINK_TAG, moveStepCheckLinkSelection);
     }
 
     /**
@@ -596,38 +537,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         resetEditorSelectorLayout();
         refreshEditorBackgrounds();
 
-        if (isCheckBlockAction(editingActionIndex)) {
-            configureCheckBlockInputs();
-            return;
-        }
-
-        if (isMoveAction(editingActionIndex)) {
-            configureMoveInputs();
-            return;
-        }
-
-        if (isRotateAction(editingActionIndex)) {
-            configureRotateInputs();
-            return;
-        }
-
-        if (isHasItemAction(editingActionIndex)) {
-            configureHasItemInputs();
-            return;
-        }
-
-        if (isRunTapeAction(editingActionIndex)) {
-            configureRunTapeInputs();
-            return;
-        }
-
-        if (isInteractAction(editingActionIndex)) {
-            configureInteractInputs();
-            return;
-        }
-
-        configureInactiveInputs();
+        String actionKey = getActionKeyForIndex(editingActionIndex);
+        actionInputStrategyRegistry.configure(actionKey, this);
     }
+
 
 
     private void resetEditorSelectorLayout() {
@@ -653,287 +566,179 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         tertiaryScrollLabel.setX(leftPos + 143);
         tertiaryScrollLabel.setY(topPos + 91);
     }
-    private void setEditorLabelVisibility(boolean secondaryVisible, boolean tertiaryVisible, boolean wideVisible) {
+    void setEditorLabelVisibility(boolean secondaryVisible, boolean tertiaryVisible, boolean wideVisible) {
         secondaryScrollLabel.visible = secondaryVisible;
         tertiaryScrollLabel.visible = tertiaryVisible;
         wideOptionLabel.visible = wideVisible;
     }
 
+    void configureSelectionInput(SelectionScrollInput input, List<Component> options, MutableComponent title,
+                                         Label label, int state, IntConsumer onChange) {
+        input.forOptions(options)
+                .titled(title)
+                .setState(clampIndex(state, options.size()))
+                .writingTo(label)
+                .calling(onChange::accept);
+    }
+
+    void configureRangeInput(ScrollInput input, int minInclusive, int maxExclusive, MutableComponent title,
+                                     Label label, int state, IntConsumer onChange) {
+        int clampedState = Mth.clamp(state, minInclusive, maxExclusive - 1);
+        input.withRange(minInclusive, maxExclusive)
+                .titled(title)
+                .setState(clampedState)
+                .writingTo(label)
+                .calling(onChange::accept);
+    }
+
+    void setInputVisibility(SelectionScrollInput input, boolean active, boolean visible) {
+        input.active = active;
+        input.visible = visible;
+    }
+
+    void setInputVisibility(ScrollInput input, boolean active, boolean visible) {
+        input.active = active;
+        input.visible = visible;
+    }
+
+    void clearEditorTargetSlots() {
+        menu.targetSlotsActive = 0;
+        menu.ghostInventory.setStackInSlot(0, ItemStack.EMPTY);
+        menu.ghostInventory.setStackInSlot(1, ItemStack.EMPTY);
+    }
+
+    void updateMoveLinkToggleTooltip() {
+        moveLinkToggleButton.getToolTip().clear();
+        moveLinkToggleButton.getToolTip().add(
+                Component.literal(MOVE_LINK_TOOLTIP_PREFIX + (editingMoveStepCheckLink ? "ON" : "OFF")));
+    }
+
+    int leftPosValue() {
+        return leftPos;
+    }
+
+    int topPosValue() {
+        return topPos;
+    }
+
+
+    SelectionScrollInput scrollInputWidget() { return scrollInput; }
+    SelectionScrollInput secondaryBackgroundInputWidget() { return secondaryBackgroundInput; }
+    SelectionScrollInput tertiaryBackgroundInputWidget() { return tertiaryBackgroundInput; }
+    ScrollInput moveDistanceInputWidget() { return moveDistanceInput; }
+    SelectionScrollInput wideOptionInputWidget() { return wideOptionInput; }
+    IconButton moveLinkToggleButtonWidget() { return moveLinkToggleButton; }
+    Label scrollInputLabelWidget() { return scrollInputLabel; }
+    Label secondaryScrollLabelWidget() { return secondaryScrollLabel; }
+    Label tertiaryScrollLabelWidget() { return tertiaryScrollLabel; }
+    Label wideOptionLabelWidget() { return wideOptionLabel; }
+
+    int getEditingCheckBlockTargetIndex() { return editingCheckBlockTargetIndex; }
+    void setEditingCheckBlockTargetIndex(int value) { editingCheckBlockTargetIndex = value; }
+    int getEditingCheckBlockMatchActionIndex() { return editingCheckBlockMatchActionIndex; }
+    void setEditingCheckBlockMatchActionIndex(int value) { editingCheckBlockMatchActionIndex = value; }
+    int getEditingHasItemTargetIndex() { return editingHasItemTargetIndex; }
+    void setEditingHasItemTargetIndex(int value) { editingHasItemTargetIndex = value; }
+    int getEditingHasItemActionIndex() { return editingHasItemActionIndex; }
+    void setEditingHasItemActionIndex(int value) { editingHasItemActionIndex = value; }
+    int getEditingRotateOptionIndex() { return editingRotateOptionIndex; }
+    void setEditingRotateOptionIndex(int value) { editingRotateOptionIndex = value; }
+    int getEditingRunTapeRepeatIndex() { return editingRunTapeRepeatIndex; }
+    void setEditingRunTapeRepeatIndexFromState(int value) {
+        editingRunTapeRepeatIndex = Mth.clamp(value - 1, 0, MAX_MOVE_DISTANCE - 1);
+    }
+    int getEditingInteractTargetIndex() { return editingInteractTargetIndex; }
+    void setEditingInteractTargetIndex(int value) { editingInteractTargetIndex = value; }
+    int getEditingInteractModeIndex() { return editingInteractModeIndex; }
+    void setEditingInteractModeIndex(int value) { editingInteractModeIndex = value; }
+    int getEditingMoveDistanceIndex() { return editingMoveDistanceIndex; }
+    void setEditingMoveDistanceIndexFromState(int value) {
+        editingMoveDistanceIndex = Mth.clamp(value - 1, 0, MAX_MOVE_DISTANCE - 1);
+    }
+    boolean isEditingMoveStepCheckLink() { return editingMoveStepCheckLink; }
+
+    List<Component> checkBlockTargetOptions() { return CHECK_BLOCK_TARGET_OPTIONS; }
+    List<Component> checkBlockMatchActionOptions() { return CHECK_BLOCK_MATCH_ACTION_OPTIONS; }
+    List<Component> hasItemActionOptions() { return HAS_ITEM_ACTION_OPTIONS; }
+    List<Component> interactTargetOptions() { return INTERACT_TARGET_OPTIONS; }
+    List<Component> interactModeOptions() { return INTERACT_MODE_OPTIONS; }
+    List<Component> rotateOptions() { return ROTATE_OPTIONS; }
+    List<Component> moveForwardOptions() { return MOVE_FORWARD_OPTIONS; }
+    List<Component> inactiveSecondaryOptions() { return INACTIVE_SECONDARY_OPTIONS; }
+    List<Component> inactiveTertiaryOptions() { return INACTIVE_TERTIARY_OPTIONS; }
+    int minMoveDistance() { return MIN_MOVE_DISTANCE; }
+    int maxMoveDistance() { return MAX_MOVE_DISTANCE; }
+    void setTargetSlotsActive(int count) { menu.targetSlotsActive = count; }
+
     /**
      * Applies selector setup for the check-block action.
      */
-    private void configureCheckBlockInputs() {
-        secondaryBackgroundInput.forOptions(CHECK_BLOCK_TARGET_OPTIONS)
-                .titled(Component.literal("Target"))
-                .writingTo(secondaryScrollLabel)
-                .calling(index -> editingCheckBlockTargetIndex = index)
-                .setState(editingCheckBlockTargetIndex);
-        secondaryBackgroundInput.active = true;
-        secondaryBackgroundInput.visible = true;
-
-        moveDistanceInput.active = false;
-        moveDistanceInput.visible = false;
-
-        tertiaryBackgroundInput.forOptions(CHECK_BLOCK_MATCH_ACTION_OPTIONS)
-                .titled(Component.literal("On Match"))
-                .writingTo(tertiaryScrollLabel)
-                .calling(index -> editingCheckBlockMatchActionIndex = index)
-                .setState(editingCheckBlockMatchActionIndex);
-        tertiaryBackgroundInput.active = true;
-        tertiaryBackgroundInput.visible = true;
-
-        wideOptionInput.active = false;
-        wideOptionInput.visible = false;
-        setEditorLabelVisibility(true, true, false);
-
-        moveLinkToggleButton.active = false;
-        moveLinkToggleButton.visible = false;
-
-        menu.targetSlotsActive = 1;
+    void configureCheckBlockInputs() {
+        TapeActionInputLayouts.configureCheckBlockInputs(this);
     }
 
     /**
      * Applies selector setup for the has-item action.
      */
-    private void configureHasItemInputs() {
-        secondaryBackgroundInput.forOptions(CHECK_BLOCK_TARGET_OPTIONS)
-                .titled(Component.literal("Target"))
-                .writingTo(secondaryScrollLabel)
-                .calling(index -> editingHasItemTargetIndex = index)
-                .setState(editingHasItemTargetIndex);
-        secondaryBackgroundInput.active = true;
-        secondaryBackgroundInput.visible = true;
-
-        moveDistanceInput.active = false;
-        moveDistanceInput.visible = false;
-
-        tertiaryBackgroundInput.forOptions(HAS_ITEM_ACTION_OPTIONS)
-                .titled(Component.literal("Action"))
-                .writingTo(tertiaryScrollLabel)
-                .calling(index -> editingHasItemActionIndex = index)
-                .setState(editingHasItemActionIndex);
-        tertiaryBackgroundInput.active = true;
-        tertiaryBackgroundInput.visible = true;
-
-        wideOptionInput.active = false;
-        wideOptionInput.visible = false;
-        setEditorLabelVisibility(true, true, false);
-
-        moveLinkToggleButton.active = false;
-        moveLinkToggleButton.visible = false;
-
-        menu.targetSlotsActive = 1;
+    void configureHasItemInputs() {
+        TapeActionInputLayouts.configureHasItemInputs(this);
     }
 
     /**
      * Applies selector setup for the rotate action.
      */
-    private void configureRotateInputs() {
-        secondaryBackgroundInput.active = false;
-        secondaryBackgroundInput.visible = false;
-
-        tertiaryBackgroundInput.active = false;
-        tertiaryBackgroundInput.visible = false;
-
-        moveDistanceInput.active = false;
-        moveDistanceInput.visible = false;
-
-        wideOptionInput.forOptions(ROTATE_OPTIONS)
-                .titled(Component.literal("Direction"))
-                .writingTo(wideOptionLabel)
-                .calling(index -> editingRotateOptionIndex = index)
-                .setState(editingRotateOptionIndex);
-        wideOptionInput.active = true;
-        wideOptionInput.visible = true;
-        setEditorLabelVisibility(false, false, true);
-
-        moveLinkToggleButton.active = false;
-        moveLinkToggleButton.visible = false;
-
-        menu.targetSlotsActive = 0;
-        menu.ghostInventory.setStackInSlot(0, ItemStack.EMPTY);
-        menu.ghostInventory.setStackInSlot(1, ItemStack.EMPTY);
+    void configureRotateInputs() {
+        TapeActionInputLayouts.configureRotateInputs(this);
     }
 
     /**
      * Applies selector setup for the run-tape action.
      */
-    private void configureRunTapeInputs() {
-        moveDistanceInput.withRange(MIN_MOVE_DISTANCE, MAX_MOVE_DISTANCE + 1)
-                .titled(Component.literal("Runs"))
-                .writingTo(secondaryScrollLabel)
-                .calling(value -> editingRunTapeRepeatIndex = Mth.clamp(value - 1, 0, MAX_MOVE_DISTANCE - 1))
-                .setState(editingRunTapeRepeatIndex + 1);
-        moveDistanceInput.active = true;
-        moveDistanceInput.visible = true;
-
-        secondaryBackgroundInput.active = false;
-        secondaryBackgroundInput.visible = false;
-
-        tertiaryBackgroundInput.active = false;
-        tertiaryBackgroundInput.visible = false;
-
-        wideOptionInput.active = false;
-        wideOptionInput.visible = false;
-        setEditorLabelVisibility(true, false, false);
-
-        moveLinkToggleButton.active = false;
-        moveLinkToggleButton.visible = false;
-
-        menu.targetSlotsActive = 1;
+    void configureRunTapeInputs() {
+        TapeActionInputLayouts.configureRunTapeInputs(this);
     }
 
     /**
      * Applies selector setup for the interact action.
      */
-    private void configureInteractInputs() {
-        // Top row: split like Below/Use -> Action (left) + Target (right)
-        scrollInput.setPosition(leftPos + 53, topPos + 64);
-        scrollInput.setWidth(82);
-
-        tertiaryBackgroundInput.setPosition(leftPos + 140, topPos + 64);
-        tertiaryBackgroundInput.setWidth(58);
-        tertiaryBackgroundInput.forOptions(INTERACT_TARGET_OPTIONS)
-                .titled(Component.literal("Target"))
-                .writingTo(tertiaryScrollLabel)
-                .calling(index -> editingInteractTargetIndex = index)
-                .setState(editingInteractTargetIndex);
-        tertiaryBackgroundInput.active = true;
-        tertiaryBackgroundInput.visible = true;
-
-        // Bottom row: wide mode selector without covering slot 2
-        secondaryBackgroundInput.setPosition(leftPos + 97, topPos + 87);
-        secondaryBackgroundInput.setWidth(101);
-        secondaryBackgroundInput.forOptions(INTERACT_MODE_OPTIONS)
-                .titled(Component.literal("Mode"))
-                .writingTo(secondaryScrollLabel)
-                .calling(index -> editingInteractModeIndex = index)
-                .setState(editingInteractModeIndex);
-        secondaryBackgroundInput.active = true;
-        secondaryBackgroundInput.visible = true;
-
-        scrollInputLabel.setX(leftPos + 56);
-        scrollInputLabel.setY(topPos + 68);
-        tertiaryScrollLabel.setX(leftPos + 143);
-        tertiaryScrollLabel.setY(topPos + 68);
-        secondaryScrollLabel.setX(leftPos + 100);
-        secondaryScrollLabel.setY(topPos + 91);
-
-        moveDistanceInput.active = false;
-        moveDistanceInput.visible = false;
-        wideOptionInput.active = false;
-        wideOptionInput.visible = false;
-        setEditorLabelVisibility(true, true, false);
-
-        moveLinkToggleButton.active = false;
-        moveLinkToggleButton.visible = false;
-
-        menu.targetSlotsActive = 2;
+    void configureInteractInputs() {
+        TapeActionInputLayouts.configureInteractInputs(this);
     }
+
     /**
      * Applies selector setup for the move action.
      */
-    private void configureMoveInputs() {
-        moveDistanceInput.withRange(MIN_MOVE_DISTANCE, MAX_MOVE_DISTANCE + 1)
-                .titled(Component.literal("Distance"))
-                .writingTo(secondaryScrollLabel)
-                .calling(value -> editingMoveDistanceIndex = Mth.clamp(value - 1, 0, MAX_MOVE_DISTANCE - 1))
-                .setState(editingMoveDistanceIndex + 1);
-
-        moveDistanceInput.active = true;
-        moveDistanceInput.visible = true;
-
-        secondaryBackgroundInput.active = false;
-        secondaryBackgroundInput.visible = false;
-
-        tertiaryBackgroundInput.forOptions(MOVE_FORWARD_OPTIONS)
-                .titled(Component.literal("Direction"))
-                .writingTo(tertiaryScrollLabel)
-                .calling(index -> {
-                })
-                .setState(0);
-        tertiaryBackgroundInput.active = false;
-        tertiaryBackgroundInput.visible = true;
-
-        wideOptionInput.active = false;
-        wideOptionInput.visible = false;
-        setEditorLabelVisibility(true, true, false);
-
-        moveLinkToggleButton.active = true;
-        moveLinkToggleButton.visible = true;
-        moveLinkToggleButton.green = editingMoveStepCheckLink;
-        moveLinkToggleButton.getToolTip().clear();
-        moveLinkToggleButton.getToolTip().add(Component.literal("Link next Check after each Move step: " + (editingMoveStepCheckLink ? "ON" : "OFF")));
-
-        menu.targetSlotsActive = 0;
-        menu.ghostInventory.setStackInSlot(0, ItemStack.EMPTY);
-        menu.ghostInventory.setStackInSlot(1, ItemStack.EMPTY);
+    void configureMoveInputs() {
+        TapeActionInputLayouts.configureMoveInputs(this);
     }
 
     /**
      * Applies a safe inactive state for selectors when no secondary inputs are needed.
      */
-    private void configureInactiveInputs() {
-        secondaryBackgroundInput.forOptions(INACTIVE_SECONDARY_OPTIONS)
-                .titled(Component.empty())
-                .writingTo(secondaryScrollLabel)
-                .calling(index -> {
-                })
-                .setState(0);
-        secondaryBackgroundInput.active = false;
-        secondaryBackgroundInput.visible = false;
-
-        moveDistanceInput.active = false;
-        moveDistanceInput.visible = false;
-
-        tertiaryBackgroundInput.forOptions(INACTIVE_TERTIARY_OPTIONS)
-                .titled(Component.empty())
-                .writingTo(tertiaryScrollLabel)
-                .calling(index -> {
-                })
-                .setState(0);
-        tertiaryBackgroundInput.active = false;
-        tertiaryBackgroundInput.visible = false;
-
-        wideOptionInput.active = false;
-        wideOptionInput.visible = false;
-        setEditorLabelVisibility(false, false, false);
-
-        moveLinkToggleButton.active = false;
-        moveLinkToggleButton.visible = false;
-
-        menu.targetSlotsActive = 0;
-        menu.ghostInventory.setStackInSlot(0, ItemStack.EMPTY);
-        menu.ghostInventory.setStackInSlot(1, ItemStack.EMPTY);
+    void configureInactiveInputs() {
+        TapeActionInputLayouts.configureInactiveInputs(this);
     }
 
     /**
      * Returns data needed by getActionIndex.
      */
     private int getActionIndex(ScheduleInstruction instruction) {
-        CompoundTag data = instruction.getData();
-        if (data.contains(ACTION_KEY_TAG))
-            return getActionIndexByKey(data.getString(ACTION_KEY_TAG));
-
-        return Mth.clamp(actionSelection.getOrDefault(instruction, 0), 0, PAL_ACTION_OPTIONS.size() - 1);
+        return instructionCodec.getActionIndex(instruction, ACTION_KEY_TAG, actionSelection, PAL_ACTION_KEYS,
+                PAL_ACTION_OPTIONS.size());
     }
 
     /**
      * Returns data needed by getActionIndexByKey.
      */
     private int getActionIndexByKey(String actionKey) {
-        int index = PAL_ACTION_KEYS.indexOf(actionKey);
-        if (index == -1)
-            return 0;
-        return Mth.clamp(index, 0, PAL_ACTION_OPTIONS.size() - 1);
+        return instructionCodec.getActionIndexByKey(actionKey, PAL_ACTION_KEYS, PAL_ACTION_OPTIONS.size());
     }
 
     /**
      * Returns data needed by getActionKeyForIndex.
      */
     private String getActionKeyForIndex(int index) {
-        int clamped = Mth.clamp(index, 0, PAL_ACTION_KEYS.size() - 1);
-        return PAL_ACTION_KEYS.get(clamped);
+        return instructionCodec.getKeyForIndex(index, PAL_ACTION_KEYS);
     }
 
     /**
@@ -1230,8 +1035,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         }
 
         if (isCheckBlockAction(editingActionIndex)) {
-            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 58, 18), "check_block_target_selector_background"));
-            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 140, topPos + 87, 58, 18), "check_block_match_selector_background"));
+            // Bottom row only; top split is rendered directly in renderBg for precise alignment.
+            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 121, 18), "check_block_match_selector_background"));
             return;
         }
 
@@ -1242,7 +1047,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         }
 
         if (isRunTapeAction(editingActionIndex)) {
-            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 58, 18), "run_tape_runs_selector_background"));
+            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 121, 18), "run_tape_runs_selector_background"));
             return;
         }
 
@@ -1765,7 +1570,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         graphics.blit(TAPE_PROGRAM_EDITOR_TEXTURE, leftPos - 2, topPos + 40, 0, 0, 256, 89, 256, 256);
         if (scrollInput != null && scrollInput.visible) {
             renderSelectorBackground(graphics, scrollInput.getX(), scrollInput.getY(), scrollInput.getWidth());
-            if (editingDestination != null && isInteractAction(editingActionIndex)
+            if (editingDestination != null && (isInteractAction(editingActionIndex) || isCheckBlockAction(editingActionIndex))
                     && tertiaryBackgroundInput != null && tertiaryBackgroundInput.visible)
                 renderSelectorBackground(graphics, tertiaryBackgroundInput.getX(), tertiaryBackgroundInput.getY(),
                         tertiaryBackgroundInput.getWidth());
@@ -1794,7 +1599,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         pPoseStack.pushPose();
         pPoseStack.translate(0, getGuiTop() + 87, 0);
         int editorBackgroundX = getGuiLeft() + 77;
-        if (editingDestination != null && isInteractAction(editingActionIndex))
+        if (editingDestination != null && (isInteractAction(editingActionIndex) || isCheckBlockAction(editingActionIndex)))
             editorBackgroundX = getGuiLeft() + 97;
         editorSubWidgets.renderWidgetBG(editorBackgroundX, graphics);
         pPoseStack.popPose();
@@ -1881,6 +1686,24 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     }
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
