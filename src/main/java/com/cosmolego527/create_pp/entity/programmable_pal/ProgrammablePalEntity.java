@@ -47,6 +47,8 @@ import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.BlockHitResult;
@@ -1222,8 +1224,13 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     }
 
     /**
-     * Executes runtime logic for executeQueuedMoveStep.
+     * Resolves the block occupied by the Pal's feet for relative target checks/movement.
      */
+    private BlockPos getFeetReferencePos() {
+        BlockPos base = blockPosition();
+        return canMoveThrough(base) ? base : base.above();
+    }
+
     private boolean executeQueuedMoveStep() {
         getNavigation().stop();
 
@@ -1233,21 +1240,22 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         setYHeadRot(direction.toYRot());
         yBodyRot = direction.toYRot();
 
-        BlockPos current = blockPosition();
-        BlockPos next = current.relative(direction);
+        BlockPos currentFeet = getFeetReferencePos();
+        BlockPos nextFeet = currentFeet.relative(direction);
 
-        if (canMoveThrough(next)) {
-            setPos(next.getX() + 0.5D, getY(), next.getZ() + 0.5D);
+        if (canMoveThrough(nextFeet)) {
+            setPos(nextFeet.getX() + 0.5D, nextFeet.getY(), nextFeet.getZ() + 0.5D);
             return true;
         }
 
         // Allow only tiny step-ups (e.g. farmland -> full block), but not full 1-block climbs.
-        BlockState nextState = level().getBlockState(next);
-        BlockPos steppedFeet = next.above();
-        double nextCollisionTop = nextState.getCollisionShape(level(), next).max(Direction.Axis.Y);
-        double stepHeight = (next.getY() + nextCollisionTop) - getY();
+        BlockPos nextGround = nextFeet.below();
+        BlockState nextState = level().getBlockState(nextGround);
+        BlockPos steppedFeet = nextGround.above();
+        double nextCollisionTop = nextState.getCollisionShape(level(), nextGround).max(Direction.Axis.Y);
+        double stepHeight = (nextGround.getY() + nextCollisionTop) - getY();
 
-        boolean canSmallStep = !canMoveThrough(next)
+        boolean canSmallStep = !canMoveThrough(nextGround)
                 && canMoveThrough(steppedFeet)
                 && nextCollisionTop > 0.0D
                 && nextCollisionTop <= 1.0D
@@ -1257,7 +1265,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         if (!canSmallStep)
             return false;
 
-        setPos(next.getX() + 0.5D, getY() + stepHeight, next.getZ() + 0.5D);
+        setPos(nextGround.getX() + 0.5D, getY() + stepHeight, nextGround.getZ() + 0.5D);
         return true;
     }
 
@@ -1630,17 +1638,67 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         ItemStack handStack = stackToUse.copy();
         fakePlayer.setItemInHand(InteractionHand.MAIN_HAND, handStack);
 
-        Vec3 hitCenter = Vec3.atCenterOf(targetPos);
-        BlockHitResult hitResult = new BlockHitResult(hitCenter, face, targetPos, false);
-        UseOnContext context = new UseOnContext(fakePlayer, InteractionHand.MAIN_HAND, hitResult);
+        BlockPos attemptedTargetPos = targetPos;
+        InteractionResult result = InteractionResult.PASS;
 
-        InteractionResult result = handStack.useOn(context);
-        if (result == InteractionResult.PASS)
-            handStack.use(serverLevel, fakePlayer, InteractionHand.MAIN_HAND);
+        BlockPos[] targetsToTry = face == Direction.UP
+                ? new BlockPos[]{targetPos, targetPos.above()}
+                : new BlockPos[]{targetPos};
+
+        for (BlockPos candidateTargetPos : targetsToTry) {
+            Vec3 hitCenter = getInteractionHitPosition(candidateTargetPos, face);
+            BlockHitResult hitResult = new BlockHitResult(hitCenter, face, candidateTargetPos, false);
+            UseOnContext context = new UseOnContext(fakePlayer, InteractionHand.MAIN_HAND, hitResult);
+
+            result = fakePlayer.gameMode.useItemOn(fakePlayer, serverLevel, handStack,
+                    InteractionHand.MAIN_HAND, hitResult);
+            if (!result.consumesAction())
+                result = handStack.useOn(context);
+
+            attemptedTargetPos = candidateTargetPos;
+            if (result.consumesAction())
+                break;
+        }
+
+        if (!result.consumesAction())
+            result = handStack.use(serverLevel, fakePlayer, InteractionHand.MAIN_HAND).getResult();
+
+        if (!result.consumesAction()) {
+            BlockState targetState = level().getBlockState(attemptedTargetPos);
+            BlockState aboveState = level().getBlockState(attemptedTargetPos.above());
+//            level().players().forEach(p -> p.displayClientMessage(Component.literal(
+//                    "Pal Use failed: item=" + stackToUse.getHoverName().getString()
+//                            + " target=" + targetState.getBlock().getName().getString()
+//                            + " above=" + aboveState.getBlock().getName().getString()
+//                            + " face=" + face), false));
+        }
 
         ItemStack updated = fakePlayer.getItemInHand(InteractionHand.MAIN_HAND);
         inventory.setItem(inventorySlot, updated.copy());
         setHeldTool(updated);
+    }
+    private Vec3 getInteractionHitPosition(BlockPos targetPos, Direction face) {
+        VoxelShape shape = level().getBlockState(targetPos).getShape(level(), targetPos);
+        if (shape.isEmpty()) {
+            return Vec3.atCenterOf(targetPos)
+                    .add(face.getStepX() * 0.25D, face.getStepY() * 0.25D, face.getStepZ() * 0.25D);
+        }
+
+        double epsilon = 0.01D;
+        double x = targetPos.getX() + 0.5D;
+        double y = targetPos.getY() + 0.5D;
+        double z = targetPos.getZ() + 0.5D;
+
+        switch (face) {
+            case UP -> y = targetPos.getY() + Math.min(1D - epsilon, shape.max(Direction.Axis.Y) + epsilon);
+            case DOWN -> y = targetPos.getY() + Math.min(1D - epsilon, shape.min(Direction.Axis.Y) + epsilon);
+            case NORTH -> z = targetPos.getZ() + Math.min(1D - epsilon, shape.min(Direction.Axis.Z) + epsilon);
+            case SOUTH -> z = targetPos.getZ() + Math.max(epsilon, shape.max(Direction.Axis.Z) - epsilon);
+            case WEST -> x = targetPos.getX() + Math.min(1D - epsilon, shape.min(Direction.Axis.X) + epsilon);
+            case EAST -> x = targetPos.getX() + Math.max(epsilon, shape.max(Direction.Axis.X) - epsilon);
+        }
+
+        return new Vec3(x, y, z);
     }
 
     /**
@@ -1651,9 +1709,9 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         BlockPos checkPos = getCheckTargetPosition(targetIndex);
         BlockState state = level().getBlockState(checkPos);
 
-        broadcastCheckResult(targetIndex, state);
+        //broadcastCheckResult(targetIndex, state);
 
-        if (!matchesConfiguredCheckBlockItem(data, state))
+        if (!matchesConfiguredCheckBlockItem(data, checkPos, state))
             return;
 
         applyCheckBlockMatchAction(data.getString(CHECK_BLOCK_MATCH_ACTION_KEY_TAG), checkPos, state);
@@ -1663,10 +1721,11 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
      * Resolves the block position used by check-block based on target index.
      */
     private BlockPos getCheckTargetPosition(int targetIndex) {
+        BlockPos feetPos = getFeetReferencePos();
         return switch (targetIndex) {
-            case 1 -> blockPosition().above();
-            case 2 -> blockPosition().relative(getDirection());
-            default -> blockPosition().below();
+            case 1 -> feetPos.above();
+            case 2 -> feetPos.relative(getDirection());
+            default -> feetPos.below();
         };
     }
 
@@ -1724,15 +1783,45 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
             return;
         }
 
-        if (state.getBlock() instanceof CropBlock cropBlock && cropBlock.isMaxAge(state)) {
-            breakBlockAndStoreDrops(checkPos, state, ItemStack.EMPTY);
+        if ("harvest".equals(matchAction)) {
+            executeHarvestAction(checkPos, state);
             return;
         }
-
-        if (!state.isAir())
-            breakBlockAndStoreDrops(checkPos, state, ItemStack.EMPTY);
     }
 
+    private void executeHarvestAction(BlockPos checkPos, BlockState state) {
+        if (!isHarvestableCrop(state))
+            return;
+
+        breakBlockAndStoreDrops(checkPos, state, ItemStack.EMPTY);
+    }
+
+    private boolean isHarvestableCrop(BlockState state) {
+        if (state.isAir() || !state.is(BlockTags.CROPS))
+            return false;
+
+        if (state.getBlock() instanceof CropBlock cropBlock)
+            return cropBlock.isMaxAge(state);
+
+        if (state.hasProperty(BlockStateProperties.AGE_1))
+            return state.getValue(BlockStateProperties.AGE_1) >= 1;
+        if (state.hasProperty(BlockStateProperties.AGE_2))
+            return state.getValue(BlockStateProperties.AGE_2) >= 2;
+        if (state.hasProperty(BlockStateProperties.AGE_3))
+            return state.getValue(BlockStateProperties.AGE_3) >= 3;
+        if (state.hasProperty(BlockStateProperties.AGE_4))
+            return state.getValue(BlockStateProperties.AGE_4) >= 4;
+        if (state.hasProperty(BlockStateProperties.AGE_5))
+            return state.getValue(BlockStateProperties.AGE_5) >= 5;
+        if (state.hasProperty(BlockStateProperties.AGE_7))
+            return state.getValue(BlockStateProperties.AGE_7) >= 7;
+        if (state.hasProperty(BlockStateProperties.AGE_15))
+            return state.getValue(BlockStateProperties.AGE_15) >= 15;
+        if (state.hasProperty(BlockStateProperties.AGE_25))
+            return state.getValue(BlockStateProperties.AGE_25) >= 25;
+
+        return true;
+    }
     /**
      * Implements mineTreeOrBlock behavior for the programmable pal feature.
      */
@@ -1820,27 +1909,38 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Implements matchesConfiguredCheckBlockItem behavior for the programmable pal feature.
      */
-    private boolean matchesConfiguredCheckBlockItem(CompoundTag data, BlockState state) {
-        if (!data.contains(CHECK_BLOCK_MATCH_ITEM_TAG) || state.isAir())
+    private boolean matchesConfiguredCheckBlockItem(CompoundTag data, BlockPos checkPos, BlockState state) {
+        if (state.isAir())
             return false;
+
+        if (!data.contains(CHECK_BLOCK_MATCH_ITEM_TAG))
+            return true;
 
         ItemStack configured = ItemStack.parseOptional(level().registryAccess(), data.getCompound(CHECK_BLOCK_MATCH_ITEM_TAG));
         if (configured.isEmpty())
-            return false;
-
-        ItemStack target = new ItemStack(state.getBlock().asItem());
-        if (target.isEmpty())
-            return false;
+            return true;
 
         FilterItemStack configuredFilter = FilterItemStack.of(configured.copy());
-        return configuredFilter.test(level(), target);
+
+        ItemStack targetBlockItem = new ItemStack(state.getBlock().asItem());
+        if (!targetBlockItem.isEmpty() && configuredFilter.test(level(), targetBlockItem))
+            return true;
+
+        if (level() instanceof ServerLevel serverLevel) {
+            LootParams.Builder lootBuilder = new LootParams.Builder(serverLevel)
+                    .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(checkPos))
+                    .withParameter(LootContextParams.TOOL, ItemStack.EMPTY)
+                    .withOptionalParameter(LootContextParams.THIS_ENTITY, this);
+
+            for (ItemStack drop : state.getDrops(lootBuilder)) {
+                if (configuredFilter.test(level(), drop))
+                    return true;
+            }
+        }
+
+        return false;
     }
 }
-
-
-
-
-
 
 
 
