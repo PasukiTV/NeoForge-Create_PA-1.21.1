@@ -54,6 +54,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
     private static final int CARD_HEADER = 22;
     private static final int CARD_WIDTH = 195;
+    private static final ResourceLocation TAPE_PROGRAM_EDITOR_TEXTURE = ResourceLocation.fromNamespaceAndPath("create_programmablepals", "textures/gui/tape_program_2.png");
 
     private List<Rect2i> extraAreas = Collections.emptyList();
 
@@ -116,8 +117,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             "check_block",
             "has_item",
             "run_tape",
-            "interact",
-            "harvest"
+            "interact"
     );
 
     private static final List<Component> PAL_ACTION_OPTIONS = List.of(
@@ -126,8 +126,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             Component.literal("Check Block"),
             Component.literal("Has Item"),
             Component.literal("Run Tape"),
-            Component.literal("Interact"),
-            Component.literal("Harvest")
+            Component.literal("Interact")
     );
 
     private static final List<Component> CHECK_BLOCK_TARGET_OPTIONS = List.of(
@@ -594,6 +593,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 || wideOptionLabel == null || moveLinkToggleButton == null)
             return;
 
+        resetEditorSelectorLayout();
         refreshEditorBackgrounds();
 
         if (isCheckBlockAction(editingActionIndex)) {
@@ -629,6 +629,30 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         configureInactiveInputs();
     }
 
+
+    private void resetEditorSelectorLayout() {
+        scrollInput.setPosition(leftPos + 53, topPos + 64);
+        scrollInput.setWidth(145);
+
+        secondaryBackgroundInput.setPosition(leftPos + 77, topPos + 87);
+        secondaryBackgroundInput.setWidth(58);
+
+        tertiaryBackgroundInput.setPosition(leftPos + 140, topPos + 87);
+        tertiaryBackgroundInput.setWidth(58);
+
+        moveDistanceInput.setPosition(leftPos + 77, topPos + 87);
+        moveDistanceInput.setWidth(58);
+
+        wideOptionInput.setPosition(leftPos + 77, topPos + 87);
+        wideOptionInput.setWidth(121);
+
+        scrollInputLabel.setX(leftPos + 56);
+        scrollInputLabel.setY(topPos + 68);
+        secondaryScrollLabel.setX(leftPos + 80);
+        secondaryScrollLabel.setY(topPos + 91);
+        tertiaryScrollLabel.setX(leftPos + 143);
+        tertiaryScrollLabel.setY(topPos + 91);
+    }
     private void setEditorLabelVisibility(boolean secondaryVisible, boolean tertiaryVisible, boolean wideVisible) {
         secondaryScrollLabel.visible = secondaryVisible;
         tertiaryScrollLabel.visible = tertiaryVisible;
@@ -763,21 +787,37 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
      * Applies selector setup for the interact action.
      */
     private void configureInteractInputs() {
-        secondaryBackgroundInput.forOptions(INTERACT_TARGET_OPTIONS)
+        // Top row: split like Below/Use -> Action (left) + Target (right)
+        scrollInput.setPosition(leftPos + 53, topPos + 64);
+        scrollInput.setWidth(82);
+
+        tertiaryBackgroundInput.setPosition(leftPos + 140, topPos + 64);
+        tertiaryBackgroundInput.setWidth(58);
+        tertiaryBackgroundInput.forOptions(INTERACT_TARGET_OPTIONS)
                 .titled(Component.literal("Target"))
-                .writingTo(secondaryScrollLabel)
+                .writingTo(tertiaryScrollLabel)
                 .calling(index -> editingInteractTargetIndex = index)
                 .setState(editingInteractTargetIndex);
+        tertiaryBackgroundInput.active = true;
+        tertiaryBackgroundInput.visible = true;
+
+        // Bottom row: wide mode selector without covering slot 2
+        secondaryBackgroundInput.setPosition(leftPos + 97, topPos + 87);
+        secondaryBackgroundInput.setWidth(101);
+        secondaryBackgroundInput.forOptions(INTERACT_MODE_OPTIONS)
+                .titled(Component.literal("Mode"))
+                .writingTo(secondaryScrollLabel)
+                .calling(index -> editingInteractModeIndex = index)
+                .setState(editingInteractModeIndex);
         secondaryBackgroundInput.active = true;
         secondaryBackgroundInput.visible = true;
 
-        tertiaryBackgroundInput.forOptions(INTERACT_MODE_OPTIONS)
-                .titled(Component.literal("Mode"))
-                .writingTo(tertiaryScrollLabel)
-                .calling(index -> editingInteractModeIndex = index)
-                .setState(editingInteractModeIndex);
-        tertiaryBackgroundInput.active = true;
-        tertiaryBackgroundInput.visible = true;
+        scrollInputLabel.setX(leftPos + 56);
+        scrollInputLabel.setY(topPos + 68);
+        tertiaryScrollLabel.setX(leftPos + 143);
+        tertiaryScrollLabel.setY(topPos + 68);
+        secondaryScrollLabel.setX(leftPos + 100);
+        secondaryScrollLabel.setY(topPos + 91);
 
         moveDistanceInput.active = false;
         moveDistanceInput.visible = false;
@@ -1167,6 +1207,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
      */
     protected void updateEditorSubwidgets(IScheduleInput field) {
         menu.targetSlotsActive = getTargetSlotCountForAction(editingActionIndex, field);
+        resetEditorSelectorLayout();
         refreshEditorBackgrounds();
     }
 
@@ -1206,8 +1247,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         }
 
         if (isInteractAction(editingActionIndex)) {
-            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 58, 18), "interact_target_selector_background"));
-            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 140, topPos + 87, 58, 18), "interact_mode_selector_background"));
+            // Bottom row only; top split is rendered directly in renderBg for precise alignment.
+            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 97, topPos + 87, 101, 18), "rotate_selector_background"));
+            return;
         }
     }
 
@@ -1544,6 +1586,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                         entry.instruction.setItem(0, runTapeStack.copy());
                     }
                 }
+
                 if (isInteractAction(editingActionIndex)) {
                     entry.instruction.getData().putString(INTERACT_TARGET_KEY_TAG, getInteractTargetKeyForIndex(editingInteractTargetIndex));
                     entry.instruction.getData().putString(INTERACT_MODE_KEY_TAG, getInteractModeKeyForIndex(editingInteractModeIndex));
@@ -1566,6 +1609,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                     checkBlockTargetSelection.put(entry.instruction, editingCheckBlockTargetIndex);
                     checkBlockMatchActionSelection.put(entry.instruction, editingCheckBlockMatchActionIndex);
                 }
+
                 if (isInteractAction(editingActionIndex)) {
                     interactTargetSelection.put(entry.instruction, editingInteractTargetIndex);
                     interactModeSelection.put(entry.instruction, editingInteractModeIndex);
@@ -1673,6 +1717,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         super.renderForeground(graphics, mouseX, mouseY, partialTicks);
         action(graphics, mouseX, mouseY, -1);
 
+
         if (editingCondition == null && editingDestination == null)
             return;
 
@@ -1717,7 +1762,14 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             return;
 
         graphics.fillGradient(0, 0, this.width, this.height, -1072689136, -804253680);
-        AllGuiTextures.SCHEDULE_EDITOR.render(graphics, leftPos - 2, topPos + 40);
+        graphics.blit(TAPE_PROGRAM_EDITOR_TEXTURE, leftPos - 2, topPos + 40, 0, 0, 256, 89, 256, 256);
+        if (scrollInput != null && scrollInput.visible) {
+            renderSelectorBackground(graphics, scrollInput.getX(), scrollInput.getY(), scrollInput.getWidth());
+            if (editingDestination != null && isInteractAction(editingActionIndex)
+                    && tertiaryBackgroundInput != null && tertiaryBackgroundInput.visible)
+                renderSelectorBackground(graphics, tertiaryBackgroundInput.getX(), tertiaryBackgroundInput.getY(),
+                        tertiaryBackgroundInput.getWidth());
+        }
         AllGuiTextures.PLAYER_INVENTORY.render(graphics, leftPos + 38, topPos + 122);
         graphics.drawString(font, playerInventoryTitle, leftPos + 46, topPos + 128, 0x505050, false);
 
@@ -1741,8 +1793,18 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         PoseStack pPoseStack = graphics.pose();
         pPoseStack.pushPose();
         pPoseStack.translate(0, getGuiTop() + 87, 0);
-        editorSubWidgets.renderWidgetBG(getGuiLeft() + 77, graphics);
+        int editorBackgroundX = getGuiLeft() + 77;
+        if (editingDestination != null && isInteractAction(editingActionIndex))
+            editorBackgroundX = getGuiLeft() + 97;
+        editorSubWidgets.renderWidgetBG(editorBackgroundX, graphics);
         pPoseStack.popPose();
+
+    }
+
+    private void renderSelectorBackground(GuiGraphics graphics, int x, int y, int width) {
+        UIRenderHelper.drawStretched(graphics, x, y, width, 18, 0, AllGuiTextures.DATA_AREA);
+        AllGuiTextures.DATA_AREA_START.render(graphics, x, y);
+        AllGuiTextures.DATA_AREA_END.render(graphics, x + width - 2, y);
     }
 
     private void toggleTapeNameEditing() {
@@ -1819,6 +1881,15 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     }
 
 }
+
+
+
+
+
+
+
+
+
 
 
 

@@ -1801,8 +1801,9 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
      */
     private void removePendingLeaves() {
         for (BlockPos leafPos : pendingLeafRemoval) {
-            if (level().getBlockState(leafPos).is(BlockTags.LEAVES))
-                level().setBlock(leafPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+            BlockState leafState = level().getBlockState(leafPos);
+            if (leafState.is(BlockTags.LEAVES))
+                breakBlockAndStoreDrops(leafPos, leafState, ItemStack.EMPTY);
         }
         pendingLeafRemoval.clear();
     }
