@@ -38,24 +38,14 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.SwordItem;
-import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.ContainerHelper;
-import net.minecraft.world.level.block.CropBlock;
-import net.minecraft.world.level.block.ChestBlock;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.common.util.FakePlayer;
-import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.entity.IEntityWithComplexSpawn;
 import org.jetbrains.annotations.Nullable;
 
@@ -124,6 +114,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private boolean followCommander = true;
     private BlockPos programStartPos = null;
     private boolean programActiveLastTick = false;
+    private boolean executingMainInstruction = false;
+    private boolean repeatCurrentInstruction = false;
 
     private static final EntityDataAccessor<Integer> DOME_COLOR =
             SynchedEntityData.defineId(ProgrammablePalEntity.class, EntityDataSerializers.INT);
@@ -136,23 +128,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     private static final int TOOL_SLOT_START = ProgrammablePalMenu.PAL_STORAGE_START;
     private static final int TOOL_SLOT_END = ProgrammablePalMenu.PAL_SLOT_COUNT;
 
-    private static final String ACTION_KEY_TAG = "PalActionKey";
-    private static final String CHECK_BLOCK_TARGET_INDEX_TAG = "PalCheckBlockTargetIndex";
-    private static final String MOVE_DISTANCE_INDEX_TAG = "PalMoveDistanceIndex";
-    private static final String ROTATE_OPTION_INDEX_TAG = "PalRotateOptionIndex";
-    private static final String MOVE_STEP_CHECK_LINK_TAG = "PalMoveStepCheckLink";
-    private static final String CHECK_BLOCK_MATCH_ACTION_KEY_TAG = "PalCheckBlockMatchActionKey";
-    private static final String CHECK_BLOCK_MATCH_ITEM_TAG = "PalCheckBlockMatchItem";
-    private static final String HAS_ITEM_TARGET_INDEX_TAG = "PalHasItemTargetIndex";
-    private static final String HAS_ITEM_ACTION_KEY_TAG = "PalHasItemActionKey";
-    private static final String HAS_ITEM_MATCH_ITEM_TAG = "PalHasItemMatchItem";
-    private static final String RUN_TAPE_ITEM_TAG = "PalRunTapeItem";
-    private static final String RUN_TAPE_REPEAT_COUNT_TAG = "PalRunTapeRepeatCount";
-    private static final String INTERACT_TARGET_KEY_TAG = "PalInteractTargetKey";
-    private static final String INTERACT_MODE_KEY_TAG = "PalInteractModeKey";
-    private static final String INTERACT_FILTER_ITEM_TAG = "PalInteractFilterItem";
-    private static final String INTERACT_KEEP_ITEM_TAG = "PalInteractKeepItem";
-    private static final String COMMANDER_UUID_TAG = "CommanderUUID";
+                                                                    private static final String COMMANDER_UUID_TAG = "CommanderUUID";
     private static final String FOLLOW_COMMANDER_TAG = "FollowCommander";
     private static final String PROGRAM_START_POS_TAG = "ProgramStartPos";
     private static final String INSTRUCTION_POINTER_TAG = "InstructionPointer";
@@ -292,7 +268,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         skipNextStandaloneCheckInstruction = false;
     }
 
-    private void clearActiveRunTapeState() {
+    void clearActiveRunTapeState() {
         activeRunTapeProgramTag = null;
         activeRunTapeInstructionPointer = 0;
         activeRunTapeRemainingRuns = 0;
@@ -305,16 +281,12 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         clearActiveRunTapeState();
         runTapeDepth = 0;
         clearChopTask();
+        executingMainInstruction = false;
+        repeatCurrentInstruction = false;
     }
 
     private Schedule getScheduleFromInstructionTape() {
-        ItemStack instructions = getInstructionTape();
-        if (instructions.isEmpty())
-            return null;
-        CompoundTag programTag = instructions.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
-        if (programTag == null || programTag.isEmpty())
-            return null;
-        return Schedule.fromTag(level().registryAccess(), programTag);
+        return PalScheduleRuntime.getScheduleFromTape(level(), getInstructionTape());
     }
 
     private void sanitizeLoadedProgramRuntimeState() {
@@ -352,26 +324,18 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     }
 
     private long[] toLongArray(Iterable<BlockPos> positions, int size) {
-        long[] values = new long[size];
-        int index = 0;
-        for (BlockPos pos : positions)
-            values[index++] = pos.asLong();
-        return values;
+        return PalPersistenceRuntime.toLongArray(positions, size);
     }
 
     private void loadQueuedPositions(long[] packedPositions, ArrayDeque<BlockPos> outQueue) {
-        outQueue.clear();
-        for (long packed : packedPositions)
-            outQueue.addLast(BlockPos.of(packed).immutable());
+        PalPersistenceRuntime.loadQueuedPositions(packedPositions, outQueue);
     }
 
     private void loadUniquePositions(long[] packedPositions, Set<BlockPos> outSet) {
-        outSet.clear();
-        for (long packed : packedPositions)
-            outSet.add(BlockPos.of(packed).immutable());
+        PalPersistenceRuntime.loadUniquePositions(packedPositions, outSet);
     }
 
-    private void captureProgramStartIfNeeded() {
+    void captureProgramStartIfNeeded() {
         if (programStartPos == null)
             programStartPos = blockPosition();
         programActiveLastTick = true;
@@ -428,38 +392,56 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         }
     }
 
-    private int findToolSlot(ItemStack target) {
-        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
-            ItemStack stack = inventory.getItem(slot);
-            if (!stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, target))
-                return slot;
-        }
-        return -1;
+    int findToolSlot(ItemStack target) {
+        return PalInventoryRuntime.findToolSlot(inventory, TOOL_SLOT_START, TOOL_SLOT_END, target);
     }
 
-    private ItemStack firstAxeInInventory() {
-        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
-            ItemStack stack = inventory.getItem(slot);
-            if (stack.getItem() instanceof AxeItem)
-                return stack;
-        }
-        return ItemStack.EMPTY;
+    ItemStack firstAxeInInventory() {
+        return PalInventoryRuntime.firstAxeInInventory(inventory, TOOL_SLOT_START, TOOL_SLOT_END);
     }
 
-    private ItemStack bestCombatToolInInventory() {
-        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
-            ItemStack stack = inventory.getItem(slot);
-            if (stack.getItem() instanceof SwordItem)
-                return stack;
-        }
+    ItemStack bestCombatToolInInventory() {
+        return PalInventoryRuntime.bestCombatToolInInventory(inventory, TOOL_SLOT_START, TOOL_SLOT_END);
+    }
 
-        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
-            ItemStack stack = inventory.getItem(slot);
-            if (stack.getItem() instanceof AxeItem)
-                return stack;
-        }
 
-        return ItemStack.EMPTY;
+
+    int getToolSlotStart() {
+        return TOOL_SLOT_START;
+    }
+
+    int getToolSlotEnd() {
+        return TOOL_SLOT_END;
+    }
+
+    GameProfile getFakePlayerProfile() {
+        return PAL_FAKE_PLAYER_PROFILE;
+    }    UUID getCommanderUUID() {
+        return commanderUUID;
+    }
+
+    boolean shouldFollowCommander() {
+        return followCommander;
+    }
+
+    int getChopCooldown() {
+        return chopCooldown;
+    }
+
+    void setChopCooldown(int value) {
+        chopCooldown = value;
+    }
+
+    BlockPos getCurrentChopTarget() {
+        return currentChopTarget;
+    }
+
+    float getCurrentChopProgress() {
+        return currentChopProgress;
+    }
+
+    void setCurrentChopProgress(float value) {
+        currentChopProgress = value;
     }
 
     private void openPalMenu(Player player) {
@@ -822,7 +804,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         return InteractionResult.sidedSuccess(level().isClientSide);
     }
 
-    private boolean isFightTapeActive() {
+    boolean isFightTapeActive() {
         ItemStack tape = getInstructionTape();
         if (tape.isEmpty())
             return false;
@@ -830,110 +812,82 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     }
 
     private void runFightTapeBehavior() {
-        if (!(level() instanceof ServerLevel serverLevel))
-            return;
-
-        ItemStack combatTool = bestCombatToolInInventory();
-        if (!combatTool.isEmpty())
-            setHeldTool(combatTool);
-        else
-            setHeldTool(ItemStack.EMPTY);
-
-        Player commander = commanderUUID == null ? null : serverLevel.getPlayerByUUID(commanderUUID);
-        if (commander == null)
-            return;
-
-        LivingEntity target = commander.getLastHurtMob();
-        if (target == null || !target.isAlive() || target.distanceToSqr(this) > 256.0D)
-            target = commander.getLastHurtByMob();
-
-        if (target != null && target.isAlive() && target != this) {
-            setTarget(target);
-        } else if (followCommander) {
-            double distSq = distanceToSqr(commander);
-            if (distSq > 9.0D)
-                getNavigation().moveTo(commander, 1.1D);
-            else if (distSq < 4.0D)
-                getNavigation().stop();
-        }
+        PalCombatRuntime.runFightTapeBehavior(this);
     }
 
     /**
      * Checks the state used by hasActiveInstructionTape.
      */
-    private boolean hasActiveInstructionTape() {
+    boolean hasActiveInstructionTape() {
         if (isFightTapeActive())
             return false;
-        ItemStack instructions = getInstructionTape();
-        if (instructions.isEmpty())
-            return false;
-        CompoundTag programTag = instructions.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
-        return programTag != null && !programTag.isEmpty();
+        return PalScheduleRuntime.hasProgramData(getInstructionTape());
     }
 
     /**
      * Executes runtime logic for runProgramTick.
      */
     private void runProgramTick() {
-        if (isFightTapeActive()) {
-            markProgramInactive();
-            clearQueuedMoveState();
-            clearActiveRunTapeState();
-            clearChopTask();
-            runFightTapeBehavior();
-            return;
-        }
+        PalProgramRuntime.runProgramTick(this);
+    }
 
-        if (!hasActiveInstructionTape()) {
-            markProgramInactive();
-            clearQueuedMoveState();
-            clearActiveRunTapeState();
-            clearChopTask();
-            return;
-        }
+    void handleFightTapeProgramTick() {
+        markProgramInactive();
+        clearQueuedMoveState();
+        clearActiveRunTapeState();
+        clearChopTask();
+        runFightTapeBehavior();
+    }
 
-        captureProgramStartIfNeeded();
+    void handleNoInstructionTapeProgramTick() {
+        markProgramInactive();
+        clearQueuedMoveState();
+        clearActiveRunTapeState();
+        clearChopTask();
+    }
 
-        if (tickChopTask())
-            return;
-
+    boolean consumeInstructionCooldown() {
         if (instructionCooldown > 0)
             instructionCooldown--;
-        if (instructionCooldown > 0)
-            return;
+        return instructionCooldown > 0;
+    }
 
-        if (queuedMoveSteps > 0) {
-            if (executeQueuedMoveStep()) {
-                queuedMoveSteps--;
-                if (queuedStepCheckInstructionData != null)
-                    executeCheckBlock(queuedStepCheckInstructionData);
-                instructionCooldown = 10;
-            } else {
-                // Re-run the linked check when a move step gets blocked to react to world changes
-                // (e.g. a sapling growing into a log between check and movement).
-                if (queuedStepCheckInstructionData != null)
-                    executeCheckBlock(queuedStepCheckInstructionData);
-                instructionCooldown = 10;
-            }
+    boolean handleQueuedMoveProgramTick() {
+        if (queuedMoveSteps <= 0)
+            return false;
 
-            if (queuedMoveSteps <= 0)
-                queuedStepCheckInstructionData = null;
-            return;
-        }
-
-        if (activeRunTapeProgramTag != null) {
-            boolean finishedSubTape = executeActiveRunTapeStep();
-            if (finishedSubTape)
-                advanceMainInstructionPointer();
+        if (executeQueuedMoveStep()) {
+            queuedMoveSteps--;
+            if (queuedStepCheckInstructionData != null)
+                executeCheckBlock(queuedStepCheckInstructionData);
             instructionCooldown = 10;
-            return;
+        } else {
+            // Re-run the linked check when a move step gets blocked to react to world changes
+            // (e.g. a sapling growing into a log between check and movement).
+            if (queuedStepCheckInstructionData != null)
+                executeCheckBlock(queuedStepCheckInstructionData);
+            instructionCooldown = 10;
         }
 
-        ItemStack instructions = getInstructionTape();
-        CompoundTag programTag = instructions.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
+        if (queuedMoveSteps <= 0)
+            queuedStepCheckInstructionData = null;
+        return true;
+    }
 
-        Schedule schedule = Schedule.fromTag(level().registryAccess(), programTag);
-        if (schedule.entries.isEmpty())
+    boolean handleActiveRunTapeProgramTick() {
+        if (activeRunTapeProgramTag == null)
+            return false;
+
+        boolean finishedSubTape = executeActiveRunTapeStep();
+        if (finishedSubTape)
+            advanceMainInstructionPointer();
+        instructionCooldown = 10;
+        return true;
+    }
+
+    void executeMainInstructionProgramTick() {
+        Schedule schedule = PalScheduleRuntime.getScheduleFromTape(level(), getInstructionTape());
+        if (schedule == null)
             return;
 
         if (instructionPointer >= schedule.entries.size())
@@ -941,13 +895,22 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
         ScheduleEntry entry = schedule.entries.get(instructionPointer);
         CompoundTag entryData = entry.instruction.getData();
-        String actionKey = entryData.getString(ACTION_KEY_TAG);
+        String actionKey = entryData.getString(PalTagKeys.ACTION_KEY);
 
         boolean advancePointer = true;
-        if (skipNextStandaloneCheckInstruction && "check_block".equals(actionKey)) {
+        if (skipNextStandaloneCheckInstruction && PalTagKeys.ACTION_CHECK_BLOCK.equals(actionKey)) {
             skipNextStandaloneCheckInstruction = false;
         } else {
-            advancePointer = executeInstruction(entry.instruction, schedule);
+            executingMainInstruction = true;
+            try {
+                advancePointer = executeInstruction(entry.instruction, schedule);
+            } finally {
+                executingMainInstruction = false;
+            }
+
+            if (consumeRepeatCurrentInstruction()) {
+                advancePointer = false;
+            }
         }
 
         if (advancePointer)
@@ -955,104 +918,25 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
 
         instructionCooldown = 10;
     }
-
     /**
      * Advances the active chop job by one game tick using player-like break progress.
      */
-    private boolean tickChopTask() {
-        if (chopCooldown > 0) {
-            chopCooldown--;
-            return true;
-        }
-
-        if (!acquireNextChopTarget())
-            return false;
-
-        if (currentChopTarget == null)
-            return false;
-
-        ItemStack tool = getHeldTool();
-        if (tool.isEmpty() || !(tool.getItem() instanceof AxeItem)) {
-            tool = firstAxeInInventory();
-            if (tool.isEmpty()) {
-                clearChopTask();
-                return false;
-            }
-            setHeldTool(tool);
-        }
-
-        int toolSlot = findToolSlot(tool);
-
-        BlockState state = level().getBlockState(currentChopTarget);
-        if (state.isAir() || state.getDestroySpeed(level(), currentChopTarget) < 0) {
-            finishCurrentChopTarget();
-            return true;
-        }
-
-        float hardness = Math.max(0.1f, state.getDestroySpeed(level(), currentChopTarget));
-        float toolSpeed = Math.max(1f, tool.getDestroySpeed(state));
-        currentChopProgress += toolSpeed / (hardness * 30f);
-
-        int breakStage = Mth.clamp((int) (currentChopProgress * 10f) - 1, 0, 9);
-        level().destroyBlockProgress(getId(), currentChopTarget, breakStage);
-
-        if (currentChopProgress >= 1f) {
-            breakBlockAndStoreDrops(currentChopTarget, state, tool);
-            tool.hurtAndBreak(1, this, EquipmentSlot.MAINHAND);
-            if (toolSlot >= 0)
-                inventory.setItem(toolSlot, tool.copy());
-
-            if (tool.isEmpty()) {
-                setHeldTool(ItemStack.EMPTY);
-                clearChopTask();
-                return false;
-            }
-
-            setHeldTool(tool);
-            finishCurrentChopTarget();
-            chopCooldown = 4;
-        }
-
-        return true;
+    boolean tickChopTask() {
+        return PalChopRuntime.tickChopTask(this);
     }
 
     private boolean isAdjacentChopReach(BlockPos target) {
-        BlockPos palPos = blockPosition();
-        int dx = Math.abs(target.getX() - palPos.getX());
-        int dy = Math.abs(target.getY() - palPos.getY());
-        int dz = Math.abs(target.getZ() - palPos.getZ());
-        return dx <= 1 && dy <= 1 && dz <= 1;
+        return PalChopRuntime.isAdjacentChopReach(blockPosition(), target);
     }
 
     private boolean queueBlockingLeavesTowardsTarget(BlockPos target) {
-        BlockPos palPos = blockPosition();
-        int stepX = Integer.compare(target.getX(), palPos.getX());
-        int stepZ = Integer.compare(target.getZ(), palPos.getZ());
-
-        BlockPos cursor = palPos;
-        boolean queuedAny = false;
-
-        for (int i = 0; i < 3; i++) {
-            cursor = cursor.offset(stepX, 0, stepZ);
-            if (level().getBlockState(cursor).is(BlockTags.LEAVES)) {
-                queueChopTarget(cursor);
-                queuedAny = true;
-            }
-
-            BlockPos above = cursor.above();
-            if (level().getBlockState(above).is(BlockTags.LEAVES)) {
-                queueChopTarget(above);
-                queuedAny = true;
-            }
-        }
-
-        return queuedAny;
+        return PalChopRuntime.queueBlockingLeavesTowardsTarget(level(), blockPosition(), target, this::queueChopTarget);
     }
 
     /**
      * Ensures there is an active target while skipping blocks that are already gone.
      */
-    private boolean acquireNextChopTarget() {
+    boolean acquireNextChopTarget() {
         while (currentChopTarget == null && !pendingChopTargets.isEmpty()) {
             BlockPos candidate = pendingChopTargets.removeFirst();
             BlockState candidateState = level().getBlockState(candidate);
@@ -1084,7 +968,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Clears block-crack visuals and resets the current chopping target.
      */
-    private void finishCurrentChopTarget() {
+    void finishCurrentChopTarget() {
         if (currentChopTarget != null) {
             level().destroyBlockProgress(getId(), currentChopTarget, -1);
             queuedChopTargets.remove(currentChopTarget);
@@ -1096,7 +980,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Clears any queued chop work when tape execution stops or changes context.
      */
-    private void clearChopTask() {
+    void clearChopTask() {
         finishCurrentChopTarget();
         pendingChopTargets.clear();
         queuedChopTargets.clear();
@@ -1105,79 +989,72 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     }
 
     private void advanceMainInstructionPointer() {
-        ItemStack instructions = getInstructionTape();
-        CompoundTag programTag = instructions.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
-        if (programTag == null || programTag.isEmpty()) {
-            instructionPointer = 0;
-            return;
-        }
-
-        Schedule schedule = Schedule.fromTag(level().registryAccess(), programTag);
-        if (schedule.entries.isEmpty()) {
-            instructionPointer = 0;
-            return;
-        }
-
-        instructionPointer++;
-        if (instructionPointer >= schedule.entries.size())
-            instructionPointer = 0;
+        instructionPointer = PalScheduleRuntime.advanceMainInstructionPointer(level(), getInstructionTape(),
+                instructionPointer);
     }
 
     /**
      * Executes runtime logic for executeInstruction.
      */
-    private boolean executeInstruction(ScheduleInstruction instruction, Schedule schedule) {
-        CompoundTag data = instruction.getData();
-        String action = data.getString(ACTION_KEY_TAG);
-
-
-        if ("check_block".equals(action)) {
-            executeCheckBlock(data);
-            return true;
-        }
-
-        if ("has_item".equals(action)) {
-            executeHasItem(data);
-            return true;
-        }
-
-        if ("rotate".equals(action)) {
-            executeRotate(data);
-            return true;
-        }
-
-        if ("run_tape".equals(action)) {
-            if (runTapeDepth > 0) {
-                executeRunTapeImmediate(data);
-                return true;
-            }
-
-            startRunTape(data);
-            if (activeRunTapeProgramTag == null)
-                return true;
-            return executeActiveRunTapeStep();
-        }
-
-        if ("interact".equals(action)) {
-            executeInteract(data);
-            return true;
-        }
-
-        executeMoveForward(data, schedule);
-        return true;
+    boolean executeInstruction(ScheduleInstruction instruction, Schedule schedule) {
+        return PalProgramRuntime.executeInstruction(this, instruction, schedule);
     }
 
-    private void executeRotate(CompoundTag data) {
-        int option = data.getInt(ROTATE_OPTION_INDEX_TAG);
-        Direction target = switch (option) {
-            case 0 -> getDirection().getClockWise();
-            case 1 -> getDirection().getCounterClockWise();
-            case 2 -> Direction.NORTH;
-            case 3 -> Direction.EAST;
-            case 4 -> Direction.SOUTH;
-            case 5 -> Direction.WEST;
-            default -> getDirection();
-        };
+
+    boolean consumeRepeatCurrentInstruction() {
+        if (!repeatCurrentInstruction)
+            return false;
+        repeatCurrentInstruction = false;
+        return true;
+    }    boolean isNestedRunTapeExecution() {
+        return runTapeDepth > 0;
+    }
+
+    boolean hasActiveRunTapeProgram() {
+        return activeRunTapeProgramTag != null;
+    }
+
+    void setActiveRunTapeProgramTag(CompoundTag tag) {
+        activeRunTapeProgramTag = tag;
+    }
+    CompoundTag getActiveRunTapeProgramTag() {
+        return activeRunTapeProgramTag;
+    }
+
+    int getActiveRunTapeInstructionPointer() {
+        return activeRunTapeInstructionPointer;
+    }
+
+    void setActiveRunTapeInstructionPointer(int value) {
+        activeRunTapeInstructionPointer = value;
+    }
+
+    int getActiveRunTapeRemainingRuns() {
+        return activeRunTapeRemainingRuns;
+    }
+
+    void setActiveRunTapeRemainingRuns(int value) {
+        activeRunTapeRemainingRuns = value;
+    }
+
+    void decrementActiveRunTapeRemainingRuns() {
+        activeRunTapeRemainingRuns--;
+    }
+
+    void incrementRunTapeDepth() {
+        runTapeDepth++;
+    }
+
+    int getRunTapeDepth() {
+        return runTapeDepth;
+    }
+    void decrementRunTapeDepth() {
+        runTapeDepth--;
+    }
+
+    void executeRotate(CompoundTag data) {
+        Direction target = PalMovementRuntime.resolveRotateDirection(getDirection(),
+                data.getInt(PalTagKeys.ROTATE_OPTION_INDEX));
 
         setYRot(target.toYRot());
         setYHeadRot(target.toYRot());
@@ -1188,8 +1065,8 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Executes runtime logic for executeMoveForward.
      */
-    private void executeMoveForward(CompoundTag data, Schedule schedule) {
-        queuedMoveSteps = Math.max(1, data.getInt(MOVE_DISTANCE_INDEX_TAG) + 1);
+    void executeMoveForward(CompoundTag data, Schedule schedule) {
+        queuedMoveSteps = Math.max(1, data.getInt(PalTagKeys.MOVE_DISTANCE_INDEX) + 1);
         queuedStepCheckInstructionData = null;
         skipNextStandaloneCheckInstruction = false;
 
@@ -1200,7 +1077,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
         if (!schedule.entries.isEmpty()) {
             ScheduleInstruction nextInstruction = schedule.entries.get(nextIndex).instruction;
             CompoundTag nextData = nextInstruction.getData();
-            if (data.getBoolean(MOVE_STEP_CHECK_LINK_TAG) && "check_block".equals(nextData.getString(ACTION_KEY_TAG))) {
+            if (data.getBoolean(PalTagKeys.MOVE_STEP_CHECK_LINK) && PalTagKeys.ACTION_CHECK_BLOCK.equals(nextData.getString(PalTagKeys.ACTION_KEY))) {
                 queuedStepCheckInstructionData = nextData.copy();
                 skipNextStandaloneCheckInstruction = true;
             }
@@ -1216,566 +1093,57 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     /**
      * Checks whether the Pal can occupy the given block position like a player would.
      */
-    private boolean canMoveThrough(BlockPos pos) {
-        BlockState state = level().getBlockState(pos);
-        if (state.is(BlockTags.LEAVES))
-            return true;
-        return state.getCollisionShape(level(), pos).isEmpty();
-    }
-
-    /**
-     * Resolves the block occupied by the Pal's feet for relative target checks/movement.
-     */
-    private BlockPos getFeetReferencePos() {
-        BlockPos base = blockPosition();
-        return canMoveThrough(base) ? base : base.above();
-    }
-
     private boolean executeQueuedMoveStep() {
-        getNavigation().stop();
-
-        Direction direction = getDirection();
-
-        setYRot(direction.toYRot());
-        setYHeadRot(direction.toYRot());
-        yBodyRot = direction.toYRot();
-
-        BlockPos currentFeet = getFeetReferencePos();
-        BlockPos nextFeet = currentFeet.relative(direction);
-
-        if (canMoveThrough(nextFeet)) {
-            setPos(nextFeet.getX() + 0.5D, nextFeet.getY(), nextFeet.getZ() + 0.5D);
-            return true;
-        }
-
-        // Allow only tiny step-ups (e.g. farmland -> full block), but not full 1-block climbs.
-        BlockPos nextGround = nextFeet.below();
-        BlockState nextState = level().getBlockState(nextGround);
-        BlockPos steppedFeet = nextGround.above();
-        double nextCollisionTop = nextState.getCollisionShape(level(), nextGround).max(Direction.Axis.Y);
-        double stepHeight = (nextGround.getY() + nextCollisionTop) - getY();
-
-        boolean canSmallStep = !canMoveThrough(nextGround)
-                && canMoveThrough(steppedFeet)
-                && nextCollisionTop > 0.0D
-                && nextCollisionTop <= 1.0D
-                && stepHeight > 0.0D
-                && stepHeight <= 0.2D;
-
-        if (!canSmallStep)
-            return false;
-
-        setPos(nextGround.getX() + 0.5D, getY() + stepHeight, nextGround.getZ() + 0.5D);
-        return true;
+        return PalMovementRuntime.executeQueuedMoveStep(this);
     }
 
-    private void startRunTape(CompoundTag data) {
-        if (!data.contains(RUN_TAPE_ITEM_TAG)) {
-            clearActiveRunTapeState();
-            return;
-        }
-
-        ItemStack nestedTape = ItemStack.parseOptional(level().registryAccess(), data.getCompound(RUN_TAPE_ITEM_TAG));
-        if (nestedTape.isEmpty() || nestedTape.getItem() != ModItems.PROGRAMMABLE_TAPE.get()) {
-            clearActiveRunTapeState();
-            return;
-        }
-
-        CompoundTag nestedProgramTag = nestedTape.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
-        if (nestedProgramTag == null || nestedProgramTag.isEmpty()) {
-            clearActiveRunTapeState();
-            return;
-        }
-
-        Schedule nestedSchedule = Schedule.fromTag(level().registryAccess(), nestedProgramTag);
-        if (nestedSchedule.entries.isEmpty()) {
-            clearActiveRunTapeState();
-            return;
-        }
-
-        activeRunTapeProgramTag = nestedProgramTag.copy();
-        activeRunTapeInstructionPointer = 0;
-        activeRunTapeRemainingRuns = Math.max(1, data.getInt(RUN_TAPE_REPEAT_COUNT_TAG) + 1);
+    void startRunTape(CompoundTag data) {
+        PalRunTapeRuntime.startRunTape(this, data);
     }
 
-    private boolean executeActiveRunTapeStep() {
-        if (activeRunTapeProgramTag == null)
-            return true;
-
-        Schedule nestedSchedule = Schedule.fromTag(level().registryAccess(), activeRunTapeProgramTag);
-        if (nestedSchedule.entries.isEmpty()) {
-            clearActiveRunTapeState();
-            return true;
-        }
-
-        if (activeRunTapeInstructionPointer >= nestedSchedule.entries.size()) {
-            clearActiveRunTapeState();
-            return true;
-        }
-
-        ScheduleInstruction nestedInstruction = nestedSchedule.entries.get(activeRunTapeInstructionPointer).instruction;
-        activeRunTapeInstructionPointer++;
-
-        runTapeDepth++;
-        try {
-            executeInstruction(nestedInstruction, nestedSchedule);
-        } finally {
-            runTapeDepth--;
-        }
-
-        if (activeRunTapeInstructionPointer >= nestedSchedule.entries.size()) {
-            if (activeRunTapeRemainingRuns > 1) {
-                activeRunTapeRemainingRuns--;
-                activeRunTapeInstructionPointer = 0;
-                return false;
-            }
-            clearActiveRunTapeState();
-            return true;
-        }
-
-        return false;
+    boolean executeActiveRunTapeStep() {
+        return PalRunTapeRuntime.executeActiveRunTapeStep(this);
     }
 
-    private void executeRunTapeImmediate(CompoundTag data) {
-        if (runTapeDepth > 4 || !data.contains(RUN_TAPE_ITEM_TAG))
-            return;
-
-        ItemStack nestedTape = ItemStack.parseOptional(level().registryAccess(), data.getCompound(RUN_TAPE_ITEM_TAG));
-        if (nestedTape.isEmpty() || nestedTape.getItem() != ModItems.PROGRAMMABLE_TAPE.get())
-            return;
-
-        CompoundTag nestedProgramTag = nestedTape.get(ModDataComponentTypes.VOID_FUNCTION_DATA);
-        if (nestedProgramTag == null || nestedProgramTag.isEmpty())
-            return;
-
-        Schedule nestedSchedule = Schedule.fromTag(level().registryAccess(), nestedProgramTag);
-        if (nestedSchedule.entries.isEmpty())
-            return;
-
-        int repeatCount = Math.max(1, data.getInt(RUN_TAPE_REPEAT_COUNT_TAG) + 1);
-
-        runTapeDepth++;
-        try {
-            for (int run = 0; run < repeatCount; run++) {
-                for (ScheduleEntry entry : nestedSchedule.entries)
-                    executeInstruction(entry.instruction, nestedSchedule);
-            }
-        } finally {
-            runTapeDepth--;
-        }
+    void executeRunTapeImmediate(CompoundTag data) {
+        PalRunTapeRuntime.executeRunTapeImmediate(this, data);
     }
 
-    private void executeHasItem(CompoundTag data) {
-        if (!data.contains(HAS_ITEM_MATCH_ITEM_TAG))
-            return;
-
-        ItemStack configured = ItemStack.parseOptional(level().registryAccess(), data.getCompound(HAS_ITEM_MATCH_ITEM_TAG));
-        if (configured.isEmpty())
-            return;
-
-        int inventorySlot = findMatchingInventorySlot(configured);
-        if (inventorySlot < 0)
-            return;
-
-        ItemStack stackToUse = inventory.getItem(inventorySlot);
-        if (stackToUse.isEmpty())
-            return;
-
-        if ("use".equals(data.getString(HAS_ITEM_ACTION_KEY_TAG))) {
-            int targetIndex = data.getInt(HAS_ITEM_TARGET_INDEX_TAG);
-            useInventoryItemOnTarget(inventorySlot, stackToUse, targetIndex);
-        }
+    void executeHasItem(CompoundTag data) {
+        PalActionRuntime.executeHasItem(this, data);
     }
 
-    private void executeInteract(CompoundTag data) {
-        String target = data.getString(INTERACT_TARGET_KEY_TAG);
-        if (!target.isEmpty() && !"storage".equals(target))
-            return;
-
-        if (!data.contains(INTERACT_FILTER_ITEM_TAG))
-            return;
-
-        ItemStack filterItem = ItemStack.parseOptional(level().registryAccess(), data.getCompound(INTERACT_FILTER_ITEM_TAG));
-        if (filterItem.isEmpty())
-            return;
-
-        Container storage = getFrontStorageContainer();
-        if (storage == null)
-            return;
-
-        FilterItemStack transferFilter = FilterItemStack.of(filterItem.copy());
-        String mode = data.getString(INTERACT_MODE_KEY_TAG);
-        ItemStack keepItem = ItemStack.EMPTY;
-        if (data.contains(INTERACT_KEEP_ITEM_TAG))
-            keepItem = ItemStack.parseOptional(level().registryAccess(), data.getCompound(INTERACT_KEEP_ITEM_TAG));
-
-        if ("pull".equals(mode)) {
-            pullFilteredItemsFromStorage(storage, transferFilter, keepItem);
-            return;
-        }
-
-        pushFilteredItemsToStorage(storage, transferFilter, keepItem);
+    void executeInteract(CompoundTag data) {
+        PalInteractRuntime.executeInteract(level(), blockPosition(), getDirection(), inventory,
+                TOOL_SLOT_START, TOOL_SLOT_END, data,
+                PalTagKeys.INTERACT_TARGET_KEY, PalTagKeys.INTERACT_MODE_KEY, PalTagKeys.INTERACT_FILTER_ITEM, PalTagKeys.INTERACT_KEEP_ITEM);
     }
 
-    private @Nullable Container getFrontStorageContainer() {
-        BlockPos storagePos = blockPosition().relative(getDirection());
-        BlockState storageState = level().getBlockState(storagePos);
-
-        if (storageState.getBlock() instanceof ChestBlock chestBlock) {
-            Container chestContainer = ChestBlock.getContainer(chestBlock, storageState, level(), storagePos, true);
-            if (chestContainer != null)
-                return chestContainer;
-        }
-
-        BlockEntity blockEntity = level().getBlockEntity(storagePos);
-        if (blockEntity instanceof Container container)
-            return container;
-        return null;
-    }
-
-    private void pullFilteredItemsFromStorage(Container storage, FilterItemStack transferFilter, ItemStack keepItem) {
-        FilterItemStack keepFilter = keepItem.isEmpty() ? null : FilterItemStack.of(keepItem.copy());
-        int keepCurrentCount = keepFilter != null ? countPalItemsMatching(keepFilter) : 0;
-
-        boolean changed = false;
-        for (int slot = 0; slot < storage.getContainerSize(); slot++) {
-            ItemStack source = storage.getItem(slot);
-            if (source.isEmpty())
-                continue;
-            if (!transferFilter.test(level(), source))
-                continue;
-
-            boolean isKeepFilteredItem = keepFilter != null && keepFilter.test(level(), source);
-            int movable = source.getCount();
-            if (isKeepFilteredItem) {
-                int keepGoalForMatchedItem = source.getMaxStackSize();
-                int keepRemaining = Math.max(0, keepGoalForMatchedItem - keepCurrentCount);
-                if (keepRemaining <= 0)
-                    continue;
-                movable = Math.min(movable, keepRemaining);
-            }
-
-            if (movable <= 0)
-                continue;
-
-            ItemStack toMove = source.copyWithCount(movable);
-            ItemStack remainder = insertIntoPalStorage(toMove);
-            int moved = movable - remainder.getCount();
-            if (moved <= 0)
-                continue;
-
-            source.shrink(moved);
-            storage.setItem(slot, source.isEmpty() ? ItemStack.EMPTY : source);
-            changed = true;
-
-            if (isKeepFilteredItem)
-                keepCurrentCount += moved;
-        }
-
-        if (changed) {
-            storage.setChanged();
-            inventory.setChanged();
-        }
-    }
-
-    private void pushFilteredItemsToStorage(Container storage, FilterItemStack transferFilter, ItemStack keepItem) {
-        FilterItemStack keepFilter = keepItem.isEmpty() ? null : FilterItemStack.of(keepItem.copy());
-        int keepCurrentCount = keepFilter != null ? countPalItemsMatching(keepFilter) : 0;
-
-        boolean changed = false;
-        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
-            ItemStack source = inventory.getItem(slot);
-            if (source.isEmpty())
-                continue;
-            if (!transferFilter.test(level(), source))
-                continue;
-
-            boolean isKeepFilteredItem = keepFilter != null && keepFilter.test(level(), source);
-            int movable = source.getCount();
-            if (isKeepFilteredItem) {
-                int keepGoalForMatchedItem = source.getMaxStackSize();
-                int excess = Math.max(0, keepCurrentCount - keepGoalForMatchedItem);
-                movable = Math.min(movable, excess);
-            }
-
-            if (movable <= 0)
-                continue;
-
-            ItemStack toMove = source.copyWithCount(movable);
-            ItemStack remainder = insertIntoContainer(storage, toMove);
-            int moved = movable - remainder.getCount();
-            if (moved <= 0)
-                continue;
-
-            source.shrink(moved);
-            inventory.setItem(slot, source.isEmpty() ? ItemStack.EMPTY : source);
-            changed = true;
-
-            if (isKeepFilteredItem)
-                keepCurrentCount = Math.max(0, keepCurrentCount - moved);
-        }
-
-        if (changed) {
-            storage.setChanged();
-            inventory.setChanged();
-        }
-    }
-
-    private ItemStack insertIntoPalStorage(ItemStack stack) {
-        ItemStack remaining = stack.copy();
-
-        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END && !remaining.isEmpty(); slot++) {
-            ItemStack existing = inventory.getItem(slot);
-            if (existing.isEmpty())
-                continue;
-            if (!ItemStack.isSameItemSameComponents(existing, remaining))
-                continue;
-
-            int maxSize = Math.min(existing.getMaxStackSize(), inventory.getMaxStackSize());
-            int free = maxSize - existing.getCount();
-            if (free <= 0)
-                continue;
-
-            int moved = Math.min(free, remaining.getCount());
-            existing.grow(moved);
-            remaining.shrink(moved);
-            inventory.setItem(slot, existing);
-        }
-
-        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END && !remaining.isEmpty(); slot++) {
-            ItemStack existing = inventory.getItem(slot);
-            if (!existing.isEmpty())
-                continue;
-
-            int moved = Math.min(Math.min(remaining.getMaxStackSize(), inventory.getMaxStackSize()), remaining.getCount());
-            ItemStack placed = remaining.copyWithCount(moved);
-            inventory.setItem(slot, placed);
-            remaining.shrink(moved);
-        }
-
-        return remaining;
-    }
-
-    private ItemStack insertIntoContainer(Container storage, ItemStack stack) {
-        ItemStack remaining = stack.copy();
-
-        for (int slot = 0; slot < storage.getContainerSize() && !remaining.isEmpty(); slot++) {
-            ItemStack existing = storage.getItem(slot);
-            if (existing.isEmpty())
-                continue;
-            if (!ItemStack.isSameItemSameComponents(existing, remaining))
-                continue;
-            if (!storage.canPlaceItem(slot, remaining))
-                continue;
-
-            int maxSize = Math.min(existing.getMaxStackSize(), storage.getMaxStackSize());
-            int free = maxSize - existing.getCount();
-            if (free <= 0)
-                continue;
-
-            int moved = Math.min(free, remaining.getCount());
-            existing.grow(moved);
-            remaining.shrink(moved);
-            storage.setItem(slot, existing);
-        }
-
-        for (int slot = 0; slot < storage.getContainerSize() && !remaining.isEmpty(); slot++) {
-            ItemStack existing = storage.getItem(slot);
-            if (!existing.isEmpty())
-                continue;
-            if (!storage.canPlaceItem(slot, remaining))
-                continue;
-
-            int moved = Math.min(Math.min(remaining.getMaxStackSize(), storage.getMaxStackSize()), remaining.getCount());
-            ItemStack placed = remaining.copyWithCount(moved);
-            storage.setItem(slot, placed);
-            remaining.shrink(moved);
-        }
-
-        return remaining;
-    }
-
-    private int countPalItemsMatching(@Nullable FilterItemStack filter) {
-        if (filter == null)
-            return 0;
-
-        int total = 0;
-        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
-            ItemStack candidate = inventory.getItem(slot);
-            if (candidate.isEmpty())
-                continue;
-            if (filter.test(level(), candidate))
-                total += candidate.getCount();
-        }
-        return total;
-    }
-    private int findMatchingInventorySlot(ItemStack configured) {
-        FilterItemStack configuredFilter = FilterItemStack.of(configured.copy());
-        for (int slot = TOOL_SLOT_START; slot < TOOL_SLOT_END; slot++) {
-            ItemStack candidate = inventory.getItem(slot);
-            if (candidate.isEmpty())
-                continue;
-            if (configuredFilter.test(level(), candidate))
-                return slot;
-        }
-        return -1;
-    }
-
-    private void useInventoryItemOnTarget(int inventorySlot, ItemStack stackToUse, int targetIndex) {
-        if (!(level() instanceof ServerLevel serverLevel))
-            return;
-
-        BlockPos targetPos = getCheckTargetPosition(targetIndex);
-        Direction face = switch (targetIndex) {
-            case 1 -> Direction.DOWN;
-            case 2 -> getDirection().getOpposite();
-            default -> Direction.UP;
-        };
-
-        FakePlayer fakePlayer = FakePlayerFactory.get(serverLevel, PAL_FAKE_PLAYER_PROFILE);
-        fakePlayer.moveTo(getX(), getY(), getZ(), getYRot(), getXRot());
-
-        ItemStack handStack = stackToUse.copy();
-        fakePlayer.setItemInHand(InteractionHand.MAIN_HAND, handStack);
-
-        BlockPos attemptedTargetPos = targetPos;
-        InteractionResult result = InteractionResult.PASS;
-
-        BlockPos[] targetsToTry = face == Direction.UP
-                ? new BlockPos[]{targetPos, targetPos.above()}
-                : new BlockPos[]{targetPos};
-
-        for (BlockPos candidateTargetPos : targetsToTry) {
-            Vec3 hitCenter = getInteractionHitPosition(candidateTargetPos, face);
-            BlockHitResult hitResult = new BlockHitResult(hitCenter, face, candidateTargetPos, false);
-            UseOnContext context = new UseOnContext(fakePlayer, InteractionHand.MAIN_HAND, hitResult);
-
-            result = fakePlayer.gameMode.useItemOn(fakePlayer, serverLevel, handStack,
-                    InteractionHand.MAIN_HAND, hitResult);
-            if (!result.consumesAction())
-                result = handStack.useOn(context);
-
-            attemptedTargetPos = candidateTargetPos;
-            if (result.consumesAction())
-                break;
-        }
-
-        if (!result.consumesAction())
-            result = handStack.use(serverLevel, fakePlayer, InteractionHand.MAIN_HAND).getResult();
-
-        if (!result.consumesAction()) {
-            BlockState targetState = level().getBlockState(attemptedTargetPos);
-            BlockState aboveState = level().getBlockState(attemptedTargetPos.above());
-//            level().players().forEach(p -> p.displayClientMessage(Component.literal(
-//                    "Pal Use failed: item=" + stackToUse.getHoverName().getString()
-//                            + " target=" + targetState.getBlock().getName().getString()
-//                            + " above=" + aboveState.getBlock().getName().getString()
-//                            + " face=" + face), false));
-        }
-
-        ItemStack updated = fakePlayer.getItemInHand(InteractionHand.MAIN_HAND);
-        inventory.setItem(inventorySlot, updated.copy());
-        setHeldTool(updated);
-    }
-    private Vec3 getInteractionHitPosition(BlockPos targetPos, Direction face) {
-        VoxelShape shape = level().getBlockState(targetPos).getShape(level(), targetPos);
-        if (shape.isEmpty()) {
-            return Vec3.atCenterOf(targetPos)
-                    .add(face.getStepX() * 0.25D, face.getStepY() * 0.25D, face.getStepZ() * 0.25D);
-        }
-
-        double epsilon = 0.01D;
-        double x = targetPos.getX() + 0.5D;
-        double y = targetPos.getY() + 0.5D;
-        double z = targetPos.getZ() + 0.5D;
-
-        switch (face) {
-            case UP -> y = targetPos.getY() + Math.min(1D - epsilon, shape.max(Direction.Axis.Y) + epsilon);
-            case DOWN -> y = targetPos.getY() + Math.min(1D - epsilon, shape.min(Direction.Axis.Y) + epsilon);
-            case NORTH -> z = targetPos.getZ() + Math.min(1D - epsilon, shape.min(Direction.Axis.Z) + epsilon);
-            case SOUTH -> z = targetPos.getZ() + Math.max(epsilon, shape.max(Direction.Axis.Z) - epsilon);
-            case WEST -> x = targetPos.getX() + Math.min(1D - epsilon, shape.min(Direction.Axis.X) + epsilon);
-            case EAST -> x = targetPos.getX() + Math.max(epsilon, shape.max(Direction.Axis.X) - epsilon);
-        }
-
-        return new Vec3(x, y, z);
-    }
-
-    /**
-     * Executes runtime logic for executeCheckBlock.
-     */
-    private void executeCheckBlock(CompoundTag data) {
-        int targetIndex = data.getInt(CHECK_BLOCK_TARGET_INDEX_TAG);
-        BlockPos checkPos = getCheckTargetPosition(targetIndex);
-        BlockState state = level().getBlockState(checkPos);
-
-        //broadcastCheckResult(targetIndex, state);
-
-        if (!matchesConfiguredCheckBlockItem(data, checkPos, state))
-            return;
-
-        applyCheckBlockMatchAction(data.getString(CHECK_BLOCK_MATCH_ACTION_KEY_TAG), checkPos, state);
+    void executeCheckBlock(CompoundTag data) {
+        PalActionRuntime.executeCheckBlock(this, data);
     }
 
     /**
      * Resolves the block position used by check-block based on target index.
      */
-    private BlockPos getCheckTargetPosition(int targetIndex) {
-        BlockPos feetPos = getFeetReferencePos();
-        return switch (targetIndex) {
-            case 1 -> feetPos.above();
-            case 2 -> feetPos.relative(getDirection());
-            default -> feetPos.below();
-        };
-    }
-
-    /**
-     * Sends a small debug message about what block was inspected.
-     */
-    private void broadcastCheckResult(int targetIndex, BlockState state) {
-        String targetName = switch (targetIndex) {
-            case 1 -> "Above";
-            case 2 -> "Front";
-            default -> "Below";
-        };
-
-        level().players().forEach(p -> p.displayClientMessage(
-                Component.literal("Pal Check " + targetName + ": " + state.getBlock().getName().getString()), false));
-    }
-
-    private void collectBlockDropsToInventory(BlockPos blockPos, BlockState state, ItemStack tool) {
-        if (!(level() instanceof ServerLevel serverLevel))
-            return;
-
-        LootParams.Builder lootBuilder = new LootParams.Builder(serverLevel)
-                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(blockPos))
-                .withParameter(LootContextParams.TOOL, tool)
-                .withOptionalParameter(LootContextParams.THIS_ENTITY, this);
-
-        for (ItemStack drop : state.getDrops(lootBuilder)) {
-            ItemStack remainder = inventory.addItem(drop.copy());
-            if (!remainder.isEmpty())
-                level().addFreshEntity(new ItemEntity(level(), getX(), getY(), getZ(), remainder));
-        }
-    }
-
-    private void breakBlockAndStoreDrops(BlockPos blockPos, BlockState state, ItemStack tool) {
-        if (state.isAir())
-            return;
-        collectBlockDropsToInventory(blockPos, state, tool);
-        level().destroyBlock(blockPos, false, this);
+    BlockPos getCheckTargetPosition(int targetIndex) {
+        return PalMovementRuntime.getCheckTargetPosition(this, targetIndex);
+    }    void breakBlockAndStoreDrops(BlockPos blockPos, BlockState state, ItemStack tool) {
+        PalBlockBreakRuntime.breakBlockAndStoreDrops(level(), this, inventory, blockPos, state, tool,
+                getX(), getY(), getZ());
     }
 
     /**
      * Applies the configured follow-up action after a successful check-block match.
      */
-    private void applyCheckBlockMatchAction(String matchAction, BlockPos checkPos, BlockState state) {
+    void applyCheckBlockMatchAction(String matchAction, BlockPos checkPos, BlockState state) {
         if ("chop".equals(matchAction)) {
             ItemStack tool = getHeldTool();
             if (!(tool.getItem() instanceof AxeItem))
                 tool = firstAxeInInventory();
             if (!(tool.getItem() instanceof AxeItem)) {
                 level().players().forEach(p -> p.displayClientMessage(Component.literal("Pal needs an axe in its inventory to chop."), true));
+                repeatCurrentInstruction = true;
                 return;
             }
             setHeldTool(tool);
@@ -1790,159 +1158,32 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     }
 
     private void executeHarvestAction(BlockPos checkPos, BlockState state) {
-        if (!isHarvestableCrop(state))
+        if (!PalCheckBlockRuntime.isHarvestableCrop(state))
             return;
 
         breakBlockAndStoreDrops(checkPos, state, ItemStack.EMPTY);
     }
 
-    private boolean isHarvestableCrop(BlockState state) {
-        if (state.isAir() || !state.is(BlockTags.CROPS))
-            return false;
-
-        if (state.getBlock() instanceof CropBlock cropBlock)
-            return cropBlock.isMaxAge(state);
-
-        if (state.hasProperty(BlockStateProperties.AGE_1))
-            return state.getValue(BlockStateProperties.AGE_1) >= 1;
-        if (state.hasProperty(BlockStateProperties.AGE_2))
-            return state.getValue(BlockStateProperties.AGE_2) >= 2;
-        if (state.hasProperty(BlockStateProperties.AGE_3))
-            return state.getValue(BlockStateProperties.AGE_3) >= 3;
-        if (state.hasProperty(BlockStateProperties.AGE_4))
-            return state.getValue(BlockStateProperties.AGE_4) >= 4;
-        if (state.hasProperty(BlockStateProperties.AGE_5))
-            return state.getValue(BlockStateProperties.AGE_5) >= 5;
-        if (state.hasProperty(BlockStateProperties.AGE_7))
-            return state.getValue(BlockStateProperties.AGE_7) >= 7;
-        if (state.hasProperty(BlockStateProperties.AGE_15))
-            return state.getValue(BlockStateProperties.AGE_15) >= 15;
-        if (state.hasProperty(BlockStateProperties.AGE_25))
-            return state.getValue(BlockStateProperties.AGE_25) >= 25;
-
-        return true;
-    }
     /**
      * Implements mineTreeOrBlock behavior for the programmable pal feature.
      */
     private void mineTreeOrBlock(BlockPos origin, BlockState originState) {
-        clearChopTask();
-
-        if (originState.isAir())
-            return;
-
-        if (!originState.is(BlockTags.LOGS)) {
-            queueChopTarget(origin);
-            return;
-        }
-
-        Set<BlockPos> visitedLogs = new HashSet<>();
-        Set<BlockPos> visitedLeaves = new HashSet<>();
-        ArrayDeque<BlockPos> logQueue = new ArrayDeque<>();
-        ArrayDeque<BlockPos> leafQueue = new ArrayDeque<>();
-        pendingLeafRemoval.clear();
-        logQueue.add(origin);
-
-        while (!logQueue.isEmpty()) {
-            BlockPos current = logQueue.removeFirst();
-            if (!visitedLogs.add(current))
-                continue;
-
-            BlockState currentState = level().getBlockState(current);
-            if (!currentState.is(BlockTags.LOGS))
-                continue;
-
-            queueChopTarget(current);
-
-            for (BlockPos neighbor : BlockPos.betweenClosed(current.offset(-1, -1, -1), current.offset(1, 1, 1))) {
-                BlockPos immutableNeighbor = neighbor.immutable();
-                BlockState neighborState = level().getBlockState(immutableNeighbor);
-                if (neighborState.is(BlockTags.LOGS) && !visitedLogs.contains(immutableNeighbor))
-                    logQueue.addLast(immutableNeighbor);
-                if (neighborState.is(BlockTags.LEAVES) && !visitedLeaves.contains(immutableNeighbor))
-                    leafQueue.addLast(immutableNeighbor);
-            }
-        }
-
-        while (!leafQueue.isEmpty()) {
-            BlockPos currentLeaf = leafQueue.removeFirst();
-            if (!visitedLeaves.add(currentLeaf))
-                continue;
-
-            BlockState currentLeafState = level().getBlockState(currentLeaf);
-            if (!currentLeafState.is(BlockTags.LEAVES))
-                continue;
-
-            pendingLeafRemoval.add(currentLeaf.immutable());
-
-            for (BlockPos neighbor : BlockPos.betweenClosed(currentLeaf.offset(-1, -1, -1), currentLeaf.offset(1, 1, 1))) {
-                BlockPos immutableNeighbor = neighbor.immutable();
-                if (visitedLeaves.contains(immutableNeighbor))
-                    continue;
-                if (level().getBlockState(immutableNeighbor).is(BlockTags.LEAVES))
-                    leafQueue.addLast(immutableNeighbor);
-            }
-        }
+        PalChopRuntime.mineTreeOrBlock(level(), origin, originState, this::clearChopTask,
+                pendingLeafRemoval, this::queueChopTarget);
     }
 
     /**
      * Removes queued leaves instantly after all logs have been chopped.
      */
     private void removePendingLeaves() {
-        for (BlockPos leafPos : pendingLeafRemoval) {
-            BlockState leafState = level().getBlockState(leafPos);
-            if (leafState.is(BlockTags.LEAVES))
-                breakBlockAndStoreDrops(leafPos, leafState, ItemStack.EMPTY);
-        }
-        pendingLeafRemoval.clear();
+        PalChopRuntime.removePendingLeaves(level(), pendingLeafRemoval,
+                (pos, state) -> breakBlockAndStoreDrops(pos, state, ItemStack.EMPTY));
     }
 
     /**
      * Queues one block for progressive chopping without duplicates.
      */
     private void queueChopTarget(BlockPos pos) {
-        BlockPos immutablePos = pos.immutable();
-        if (queuedChopTargets.add(immutablePos))
-            pendingChopTargets.addLast(immutablePos);
-    }
-
-    /**
-     * Implements matchesConfiguredCheckBlockItem behavior for the programmable pal feature.
-     */
-    private boolean matchesConfiguredCheckBlockItem(CompoundTag data, BlockPos checkPos, BlockState state) {
-        if (state.isAir())
-            return false;
-
-        if (!data.contains(CHECK_BLOCK_MATCH_ITEM_TAG))
-            return true;
-
-        ItemStack configured = ItemStack.parseOptional(level().registryAccess(), data.getCompound(CHECK_BLOCK_MATCH_ITEM_TAG));
-        if (configured.isEmpty())
-            return true;
-
-        FilterItemStack configuredFilter = FilterItemStack.of(configured.copy());
-
-        ItemStack targetBlockItem = new ItemStack(state.getBlock().asItem());
-        if (!targetBlockItem.isEmpty() && configuredFilter.test(level(), targetBlockItem))
-            return true;
-
-        if (level() instanceof ServerLevel serverLevel) {
-            LootParams.Builder lootBuilder = new LootParams.Builder(serverLevel)
-                    .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(checkPos))
-                    .withParameter(LootContextParams.TOOL, ItemStack.EMPTY)
-                    .withOptionalParameter(LootContextParams.THIS_ENTITY, this);
-
-            for (ItemStack drop : state.getDrops(lootBuilder)) {
-                if (configuredFilter.test(level(), drop))
-                    return true;
-            }
-        }
-
-        return false;
-    }
-}
-
-
-
-
+        PalChopRuntime.queueChopTarget(pos, queuedChopTargets, pendingChopTargets);
+    }}
 

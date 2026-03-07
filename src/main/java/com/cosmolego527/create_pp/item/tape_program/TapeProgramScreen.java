@@ -1041,8 +1041,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         }
 
         if (isHasItemAction(editingActionIndex)) {
-            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 58, 18), "check_block_target_selector_background"));
-            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 140, topPos + 87, 58, 18), "check_block_match_selector_background"));
+            // Bottom row only; top split is rendered directly in renderBg for precise alignment.
+            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 121, 18), "check_block_match_selector_background"));
             return;
         }
 
@@ -1570,7 +1570,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         graphics.blit(TAPE_PROGRAM_EDITOR_TEXTURE, leftPos - 2, topPos + 40, 0, 0, 256, 89, 256, 256);
         if (scrollInput != null && scrollInput.visible) {
             renderSelectorBackground(graphics, scrollInput.getX(), scrollInput.getY(), scrollInput.getWidth());
-            if (editingDestination != null && (isInteractAction(editingActionIndex) || isCheckBlockAction(editingActionIndex))
+            if (editingDestination != null
+                    && (isInteractAction(editingActionIndex) || isCheckBlockAction(editingActionIndex) || isHasItemAction(editingActionIndex))
                     && tertiaryBackgroundInput != null && tertiaryBackgroundInput.visible)
                 renderSelectorBackground(graphics, tertiaryBackgroundInput.getX(), tertiaryBackgroundInput.getY(),
                         tertiaryBackgroundInput.getWidth());

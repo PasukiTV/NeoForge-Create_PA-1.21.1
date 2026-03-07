@@ -41,16 +41,33 @@ final class TapeActionInputLayouts {
     }
 
     static void configureHasItemInputs(TapeProgramScreen screen) {
-        screen.configureSelectionInput(screen.secondaryBackgroundInputWidget(), screen.checkBlockTargetOptions(),
-                Component.literal("Target"), screen.secondaryScrollLabelWidget(), screen.getEditingHasItemTargetIndex(),
-                screen::setEditingHasItemTargetIndex);
-        screen.setInputVisibility(screen.secondaryBackgroundInputWidget(), true, true);
-        screen.setInputVisibility(screen.moveDistanceInputWidget(), false, false);
+        screen.scrollInputWidget().setPosition(screen.leftPosValue() + 53, screen.topPosValue() + 64);
+        screen.scrollInputWidget().setWidth(82);
 
-        screen.configureSelectionInput(screen.tertiaryBackgroundInputWidget(), screen.hasItemActionOptions(),
-                Component.literal("Action"), screen.tertiaryScrollLabelWidget(), screen.getEditingHasItemActionIndex(),
-                screen::setEditingHasItemActionIndex);
+        // Top-right selector: Target
+        screen.tertiaryBackgroundInputWidget().setPosition(screen.leftPosValue() + 140, screen.topPosValue() + 64);
+        screen.tertiaryBackgroundInputWidget().setWidth(58);
+        screen.configureSelectionInput(screen.tertiaryBackgroundInputWidget(), screen.checkBlockTargetOptions(),
+                Component.literal("Target"), screen.tertiaryScrollLabelWidget(), screen.getEditingHasItemTargetIndex(),
+                screen::setEditingHasItemTargetIndex);
         screen.setInputVisibility(screen.tertiaryBackgroundInputWidget(), true, true);
+
+        // Bottom full-width selector: Action (Use/...)
+        screen.secondaryBackgroundInputWidget().setPosition(screen.leftPosValue() + 77, screen.topPosValue() + 87);
+        screen.secondaryBackgroundInputWidget().setWidth(121);
+        screen.configureSelectionInput(screen.secondaryBackgroundInputWidget(), screen.hasItemActionOptions(),
+                Component.literal("Action"), screen.secondaryScrollLabelWidget(), screen.getEditingHasItemActionIndex(),
+                screen::setEditingHasItemActionIndex);
+        screen.setInputVisibility(screen.secondaryBackgroundInputWidget(), true, true);
+
+        screen.scrollInputLabelWidget().setX(screen.leftPosValue() + 56);
+        screen.scrollInputLabelWidget().setY(screen.topPosValue() + 68);
+        screen.tertiaryScrollLabelWidget().setX(screen.leftPosValue() + 143);
+        screen.tertiaryScrollLabelWidget().setY(screen.topPosValue() + 68);
+        screen.secondaryScrollLabelWidget().setX(screen.leftPosValue() + 80);
+        screen.secondaryScrollLabelWidget().setY(screen.topPosValue() + 91);
+
+        screen.setInputVisibility(screen.moveDistanceInputWidget(), false, false);
         screen.setInputVisibility(screen.wideOptionInputWidget(), false, false);
         screen.setEditorLabelVisibility(true, true, false);
         screen.moveLinkToggleButtonWidget().active = false;
