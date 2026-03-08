@@ -28,5 +28,5 @@ final class PalTagKeys {
     static final String INTERACT_TARGET_KEY = "PalInteractTargetKey";
     static final String INTERACT_MODE_KEY = "PalInteractModeKey";
     static final String INTERACT_FILTER_ITEM = "PalInteractFilterItem";
-    static final String INTERACT_KEEP_ITEM = "PalInteractKeepItem";
+    static final String INTERACT_MAX_STACKS_INDEX = "PalInteractMaxStacksIndex";
 }

@@ -100,6 +100,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private final IdentityHashMap<ScheduleInstruction, Integer> runTapeRepeatSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Integer> interactTargetSelection = new IdentityHashMap<>();
     private final IdentityHashMap<ScheduleInstruction, Integer> interactModeSelection = new IdentityHashMap<>();
+    private final IdentityHashMap<ScheduleInstruction, Integer> interactMaxStacksSelection = new IdentityHashMap<>();
     private int editingActionIndex = 0;
     private int editingCheckBlockTargetIndex = 0;
     private int editingRotateOptionIndex = 0;
@@ -111,6 +112,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private int editingHasItemActionIndex = 0;
     private int editingInteractTargetIndex = 0;
     private int editingInteractModeIndex = 0;
+    private int editingInteractMaxStacksIndex = 0;
     private boolean scheduleSavedToServer = false;
     private boolean closeAfterSave = false;
     private int closeAfterSaveTicks = 0;
@@ -206,6 +208,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
     private static final int MIN_MOVE_DISTANCE = 1;
     private static final int MAX_MOVE_DISTANCE = 99;
+    private static final int MAX_INTERACT_STACKS = 99;
     private static final String MOVE_LINK_TOOLTIP_PREFIX = "Link next Check after each Move step: ";
 
     private static final String ACTION_KEY_TAG = "PalActionKey";
@@ -223,7 +226,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     private static final String INTERACT_TARGET_KEY_TAG = "PalInteractTargetKey";
     private static final String INTERACT_MODE_KEY_TAG = "PalInteractModeKey";
     private static final String INTERACT_FILTER_ITEM_TAG = "PalInteractFilterItem";
-    private static final String INTERACT_KEEP_ITEM_TAG = "PalInteractKeepItem";
+    private static final String INTERACT_MAX_STACKS_INDEX_TAG = "PalInteractMaxStacksIndex";
 
     /**
      * Implements TapeProgramScreen behavior for the programmable pal feature.
@@ -359,6 +362,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             editingHasItemActionIndex = getHasItemActionIndex(instruction);
             editingInteractTargetIndex = getInteractTargetIndex(instruction);
             editingInteractModeIndex = getInteractModeIndex(instruction);
+            editingInteractMaxStacksIndex = getInteractMaxStacksIndex(instruction);
             updateEditorSubwidgets(editingDestination);
             if (isCheckBlockAction(editingActionIndex))
                 menu.ghostInventory.setStackInSlot(0, getCheckBlockMatchItem(instruction));
@@ -368,7 +372,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 menu.ghostInventory.setStackInSlot(0, getRunTapeItem(instruction));
             if (isInteractAction(editingActionIndex)) {
                 menu.ghostInventory.setStackInSlot(0, getInteractFilterItem(instruction));
-                menu.ghostInventory.setStackInSlot(1, getInteractKeepItem(instruction));
+                menu.ghostInventory.setStackInSlot(1, ItemStack.EMPTY);
             }
 
             scrollInput.forOptions(PAL_ACTION_OPTIONS)
@@ -498,8 +502,9 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         return instructionCodec.getOptionalItem(instruction, INTERACT_FILTER_ITEM_TAG, menu.player.registryAccess());
     }
 
-    private ItemStack getInteractKeepItem(ScheduleInstruction instruction) {
-        return instructionCodec.getOptionalItem(instruction, INTERACT_KEEP_ITEM_TAG, menu.player.registryAccess());
+    private int getInteractMaxStacksIndex(ScheduleInstruction instruction) {
+        return instructionCodec.getStoredClampedIndex(instruction, INTERACT_MAX_STACKS_INDEX_TAG, interactMaxStacksSelection, 0,
+                MAX_INTERACT_STACKS + 1);
     }
     /**
      * Returns data needed by getRotateOptionIndex.
@@ -576,8 +581,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                                          Label label, int state, IntConsumer onChange) {
         input.forOptions(options)
                 .titled(title)
-                .setState(clampIndex(state, options.size()))
                 .writingTo(label)
+                .setState(clampIndex(state, options.size()))
                 .calling(onChange::accept);
     }
 
@@ -586,8 +591,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         int clampedState = Mth.clamp(state, minInclusive, maxExclusive - 1);
         input.withRange(minInclusive, maxExclusive)
                 .titled(title)
-                .setState(clampedState)
                 .writingTo(label)
+                .setState(clampedState)
                 .calling(onChange::accept);
     }
 
@@ -651,6 +656,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     void setEditingInteractTargetIndex(int value) { editingInteractTargetIndex = value; }
     int getEditingInteractModeIndex() { return editingInteractModeIndex; }
     void setEditingInteractModeIndex(int value) { editingInteractModeIndex = value; }
+    int getEditingInteractMaxStacksIndex() { return editingInteractMaxStacksIndex; }
+    void setEditingInteractMaxStacksIndexFromState(int value) {
+        editingInteractMaxStacksIndex = Mth.clamp(value, 0, MAX_INTERACT_STACKS);
+    }
     int getEditingMoveDistanceIndex() { return editingMoveDistanceIndex; }
     void setEditingMoveDistanceIndexFromState(int value) {
         editingMoveDistanceIndex = Mth.clamp(value - 1, 0, MAX_MOVE_DISTANCE - 1);
@@ -668,6 +677,17 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
     List<Component> inactiveTertiaryOptions() { return INACTIVE_TERTIARY_OPTIONS; }
     int minMoveDistance() { return MIN_MOVE_DISTANCE; }
     int maxMoveDistance() { return MAX_MOVE_DISTANCE; }
+    int maxInteractStacks() { return MAX_INTERACT_STACKS; }
+    MutableComponent interactStackLimitLabel() {
+        return editingInteractModeIndex == 0
+                ? Component.literal("Max stacks in Pal")
+                : Component.literal("Keep stacks in Pal");
+    }
+    void setInteractStackLimitLabelValue(int value) {
+        if (wideOptionLabel == null)
+            return;
+        wideOptionLabel.text = Component.literal(value == 0 ? "All" : String.valueOf(value));
+    }
     void setTargetSlotsActive(int count) { menu.targetSlotsActive = count; }
 
     /**
@@ -773,7 +793,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
 
     private int getTargetSlotCountForAction(int index, IScheduleInput fallback) {
         if (isInteractAction(index))
-            return 2;
+            return 1;
         if (isCheckBlockAction(index) || isHasItemAction(index) || isRunTapeAction(index))
             return 1;
         return fallback.slotsTargeted();
@@ -825,11 +845,11 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
             Component target = INTERACT_TARGET_OPTIONS.get(getInteractTargetIndex(instruction));
             Component mode = INTERACT_MODE_OPTIONS.get(getInteractModeIndex(instruction));
             ItemStack filter = getInteractFilterItem(instruction);
-            ItemStack keep = getInteractKeepItem(instruction);
+            int maxStacksIndex = getInteractMaxStacksIndex(instruction);
             String filterName = filter.isEmpty() ? "Any" : filter.getHoverName().getString();
-            String keepName = keep.isEmpty() ? "None" : keep.getHoverName().getString();
+            String stackLimit = maxStacksIndex == 0 ? "all" : String.valueOf(maxStacksIndex);
             return Component.literal(action.getString() + " " + target.getString() + " " + mode.getString()
-                    + " [" + filterName + "] keep [" + keepName + "]");
+                    + " [" + filterName + "] stacks=" + stackLimit);
         }
 
         return action;
@@ -958,23 +978,22 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 interactTargetSelection.put(editingDestination, editingInteractTargetIndex);
                 interactModeSelection.put(editingDestination, editingInteractModeIndex);
 
+                destinationData.putInt(INTERACT_MAX_STACKS_INDEX_TAG, editingInteractMaxStacksIndex);
+                interactMaxStacksSelection.put(editingDestination, editingInteractMaxStacksIndex);
+
                 ItemStack filterItem = menu.ghostInventory.getStackInSlot(0);
-                ItemStack keepItem = menu.ghostInventory.getStackInSlot(1);
                 if (filterItem.isEmpty())
                     destinationData.remove(INTERACT_FILTER_ITEM_TAG);
                 else
                     destinationData.put(INTERACT_FILTER_ITEM_TAG, filterItem.saveOptional(menu.player.registryAccess()));
-                if (keepItem.isEmpty())
-                    destinationData.remove(INTERACT_KEEP_ITEM_TAG);
-                else
-                    destinationData.put(INTERACT_KEEP_ITEM_TAG, keepItem.saveOptional(menu.player.registryAccess()));
             } else {
                 destinationData.remove(INTERACT_TARGET_KEY_TAG);
                 destinationData.remove(INTERACT_MODE_KEY_TAG);
                 destinationData.remove(INTERACT_FILTER_ITEM_TAG);
-                destinationData.remove(INTERACT_KEEP_ITEM_TAG);
+                destinationData.remove(INTERACT_MAX_STACKS_INDEX_TAG);
                 interactTargetSelection.remove(editingDestination);
                 interactModeSelection.remove(editingDestination);
+                interactMaxStacksSelection.remove(editingDestination);
             }
 
             if (isMoveAction(editingActionIndex)) {
@@ -1052,8 +1071,8 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         }
 
         if (isInteractAction(editingActionIndex)) {
-            // Bottom row only; top split is rendered directly in renderBg for precise alignment.
-            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 97, topPos + 87, 101, 18), "rotate_selector_background"));
+            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 77, topPos + 87, 58, 18), "check_block_target_selector_background"));
+            editorSubWidgets.add(Pair.of(new TooltipArea(leftPos + 140, topPos + 87, 58, 18), "check_block_match_selector_background"));
             return;
         }
     }
@@ -1395,12 +1414,10 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 if (isInteractAction(editingActionIndex)) {
                     entry.instruction.getData().putString(INTERACT_TARGET_KEY_TAG, getInteractTargetKeyForIndex(editingInteractTargetIndex));
                     entry.instruction.getData().putString(INTERACT_MODE_KEY_TAG, getInteractModeKeyForIndex(editingInteractModeIndex));
+                    entry.instruction.getData().putInt(INTERACT_MAX_STACKS_INDEX_TAG, editingInteractMaxStacksIndex);
                     ItemStack filterItem = menu.ghostInventory.getStackInSlot(0);
-                    ItemStack keepItem = menu.ghostInventory.getStackInSlot(1);
                     if (!filterItem.isEmpty())
                         entry.instruction.getData().put(INTERACT_FILTER_ITEM_TAG, filterItem.saveOptional(menu.player.registryAccess()));
-                    if (!keepItem.isEmpty())
-                        entry.instruction.getData().put(INTERACT_KEEP_ITEM_TAG, keepItem.saveOptional(menu.player.registryAccess()));
                 }
                 if (isMoveAction(editingActionIndex)) {
                     entry.instruction.getData().putInt(MOVE_DISTANCE_INDEX_TAG, editingMoveDistanceIndex);
@@ -1418,6 +1435,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
                 if (isInteractAction(editingActionIndex)) {
                     interactTargetSelection.put(entry.instruction, editingInteractTargetIndex);
                     interactModeSelection.put(entry.instruction, editingInteractModeIndex);
+                    interactMaxStacksSelection.put(entry.instruction, editingInteractMaxStacksIndex);
                 }
                 if (isMoveAction(editingActionIndex)) {
                     moveDistanceSelection.put(entry.instruction, editingMoveDistanceIndex);
@@ -1600,7 +1618,7 @@ public class TapeProgramScreen extends AbstractSimiContainerScreen<TapeProgramMe
         pPoseStack.pushPose();
         pPoseStack.translate(0, getGuiTop() + 87, 0);
         int editorBackgroundX = getGuiLeft() + 77;
-        if (editingDestination != null && (isInteractAction(editingActionIndex) || isCheckBlockAction(editingActionIndex)))
+        if (editingDestination != null && isCheckBlockAction(editingActionIndex))
             editorBackgroundX = getGuiLeft() + 97;
         editorSubWidgets.renderWidgetBG(editorBackgroundX, graphics);
         pPoseStack.popPose();

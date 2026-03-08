@@ -1116,7 +1116,7 @@ public class ProgrammablePalEntity extends PathfinderMob implements IEntityWithC
     void executeInteract(CompoundTag data) {
         PalInteractRuntime.executeInteract(level(), blockPosition(), getDirection(), inventory,
                 TOOL_SLOT_START, TOOL_SLOT_END, data,
-                PalTagKeys.INTERACT_TARGET_KEY, PalTagKeys.INTERACT_MODE_KEY, PalTagKeys.INTERACT_FILTER_ITEM, PalTagKeys.INTERACT_KEEP_ITEM);
+                PalTagKeys.INTERACT_TARGET_KEY, PalTagKeys.INTERACT_MODE_KEY, PalTagKeys.INTERACT_FILTER_ITEM, PalTagKeys.INTERACT_MAX_STACKS_INDEX);
     }
 
     void executeCheckBlock(CompoundTag data) {

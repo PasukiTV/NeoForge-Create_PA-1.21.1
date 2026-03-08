@@ -44,7 +44,6 @@ final class TapeActionInputLayouts {
         screen.scrollInputWidget().setPosition(screen.leftPosValue() + 53, screen.topPosValue() + 64);
         screen.scrollInputWidget().setWidth(82);
 
-        // Top-right selector: Target
         screen.tertiaryBackgroundInputWidget().setPosition(screen.leftPosValue() + 140, screen.topPosValue() + 64);
         screen.tertiaryBackgroundInputWidget().setWidth(58);
         screen.configureSelectionInput(screen.tertiaryBackgroundInputWidget(), screen.checkBlockTargetOptions(),
@@ -52,7 +51,6 @@ final class TapeActionInputLayouts {
                 screen::setEditingHasItemTargetIndex);
         screen.setInputVisibility(screen.tertiaryBackgroundInputWidget(), true, true);
 
-        // Bottom full-width selector: Action (Use/...)
         screen.secondaryBackgroundInputWidget().setPosition(screen.leftPosValue() + 77, screen.topPosValue() + 87);
         screen.secondaryBackgroundInputWidget().setWidth(121);
         screen.configureSelectionInput(screen.secondaryBackgroundInputWidget(), screen.hasItemActionOptions(),
@@ -118,26 +116,41 @@ final class TapeActionInputLayouts {
                 screen::setEditingInteractTargetIndex);
         screen.setInputVisibility(screen.tertiaryBackgroundInputWidget(), true, true);
 
-        screen.secondaryBackgroundInputWidget().setPosition(screen.leftPosValue() + 97, screen.topPosValue() + 87);
-        screen.secondaryBackgroundInputWidget().setWidth(101);
+        screen.secondaryBackgroundInputWidget().setPosition(screen.leftPosValue() + 140, screen.topPosValue() + 87);
+        screen.secondaryBackgroundInputWidget().setWidth(58);
         screen.configureSelectionInput(screen.secondaryBackgroundInputWidget(), screen.interactModeOptions(),
-                Component.literal("Mode"), screen.secondaryScrollLabelWidget(), screen.getEditingInteractModeIndex(),
-                screen::setEditingInteractModeIndex);
+                Component.literal("Mode"), screen.secondaryScrollLabelWidget(), screen.getEditingInteractModeIndex(), index -> {
+                    screen.setEditingInteractModeIndex(index);
+                    screen.moveDistanceInputWidget().titled(screen.interactStackLimitLabel());
+                    screen.setInteractStackLimitLabelValue(screen.getEditingInteractMaxStacksIndex());
+                });
         screen.setInputVisibility(screen.secondaryBackgroundInputWidget(), true, true);
+
+        screen.moveDistanceInputWidget().setPosition(screen.leftPosValue() + 77, screen.topPosValue() + 87);
+        screen.moveDistanceInputWidget().setWidth(58);
+        screen.configureRangeInput(screen.moveDistanceInputWidget(), 0, screen.maxInteractStacks() + 1,
+                screen.interactStackLimitLabel(), screen.wideOptionLabelWidget(), screen.getEditingInteractMaxStacksIndex(),
+                value -> {
+                    screen.setEditingInteractMaxStacksIndexFromState(value);
+                    screen.setInteractStackLimitLabelValue(value);
+                });
+        screen.setInputVisibility(screen.moveDistanceInputWidget(), true, true);
+        screen.setInteractStackLimitLabelValue(screen.getEditingInteractMaxStacksIndex());
 
         screen.scrollInputLabelWidget().setX(screen.leftPosValue() + 56);
         screen.scrollInputLabelWidget().setY(screen.topPosValue() + 68);
         screen.tertiaryScrollLabelWidget().setX(screen.leftPosValue() + 143);
         screen.tertiaryScrollLabelWidget().setY(screen.topPosValue() + 68);
-        screen.secondaryScrollLabelWidget().setX(screen.leftPosValue() + 100);
+        screen.secondaryScrollLabelWidget().setX(screen.leftPosValue() + 143);
         screen.secondaryScrollLabelWidget().setY(screen.topPosValue() + 91);
+        screen.wideOptionLabelWidget().setX(screen.leftPosValue() + 80);
+        screen.wideOptionLabelWidget().setY(screen.topPosValue() + 91);
 
-        screen.setInputVisibility(screen.moveDistanceInputWidget(), false, false);
         screen.setInputVisibility(screen.wideOptionInputWidget(), false, false);
-        screen.setEditorLabelVisibility(true, true, false);
+        screen.setEditorLabelVisibility(true, true, true);
         screen.moveLinkToggleButtonWidget().active = false;
         screen.moveLinkToggleButtonWidget().visible = false;
-        screen.setTargetSlotsActive(2);
+        screen.setTargetSlotsActive(1);
     }
 
     static void configureMoveInputs(TapeProgramScreen screen) {
